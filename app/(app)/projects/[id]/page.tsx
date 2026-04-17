@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { mockProjects, mockCallLogs } from "@/lib/mock-data";
-import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2 } from "lucide-react";
+import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code } from "lucide-react";
 
 const statusConfig = {
   active:    { label: "稼働中", color: "text-emerald-400", bg: "bg-emerald-400/10" },
@@ -42,19 +42,32 @@ export default function ProjectDetailPage() {
             <Calendar className="w-3.5 h-3.5 mr-1.5" />スケジュール
           </Button>
         </Link>
+        <Link href={`/projects/${project.id}/chat`}>
+          <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+            <MessageSquare className="w-3.5 h-3.5 mr-1.5" />壁打ち再開
+          </Button>
+        </Link>
         <Link href={`/projects/${project.id}/content`}>
           <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
             <FileText className="w-3.5 h-3.5 mr-1.5" />コール対応設定
           </Button>
         </Link>
+        {project.ai_provider === "vapi" ? (
+          <Link href={`/projects/${project.id}/prompt`}>
+            <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+              <Code className="w-3.5 h-3.5 mr-1.5" />プロンプト編集
+            </Button>
+          </Link>
+        ) : (
+          <Link href={`/projects/${project.id}/flow`}>
+            <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+              <GitBranch className="w-3.5 h-3.5 mr-1.5" />フロー編集
+            </Button>
+          </Link>
+        )}
         <Link href={`/projects/${project.id}/builder`}>
           <Button variant="outline" size="sm" className="border-primary/30 text-primary hover:bg-primary/5 h-8 text-xs">
             <Wand2 className="w-3.5 h-3.5 mr-1.5" />AIビルダー
-          </Button>
-        </Link>
-        <Link href={`/projects/${project.id}/flow`}>
-          <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
-            <GitBranch className="w-3.5 h-3.5 mr-1.5" />フロー編集
           </Button>
         </Link>
         {project.status === "active" ? (
@@ -180,9 +193,13 @@ export default function ProjectDetailPage() {
           <h3 className="font-semibold text-sm mb-4">設定メニュー</h3>
           <div className="space-y-2">
             {[
+              { href: `/projects/${project.id}/chat`, icon: MessageSquare, label: "チャッピー壁打ち", desc: "AIアシスタントとシナリオを構築" },
               { href: `/projects/${project.id}/content`, icon: FileText, label: "コール対応設定", desc: "シナリオ・FAQ・エスカレーション" },
+              ...(project.ai_provider === "vapi"
+                ? [{ href: `/projects/${project.id}/prompt`, icon: Code, label: "システムプロンプト", desc: "Vapiシステムプロンプトを直接編集" }]
+                : [{ href: `/projects/${project.id}/flow`, icon: GitBranch, label: "トークフローエディタ", desc: "DFCX会話フローを視覚的に設計" }]
+              ),
               { href: `/projects/${project.id}/builder`, icon: Wand2, label: "AIビルダー", desc: "設定をAIに構築・デプロイ" },
-              { href: `/projects/${project.id}/flow`, icon: GitBranch, label: "トークフローエディタ", desc: "会話フローを視覚的に設計" },
               { href: `/projects/${project.id}/schedule`, icon: Calendar, label: "スケジュール設定", desc: "発信日時・リスト設定" },
             ].map(({ href, icon: Icon, label, desc }) => (
               <Link key={href} href={href}>
