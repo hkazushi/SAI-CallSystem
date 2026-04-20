@@ -111,24 +111,6 @@ export default function LandingPage() {
           </Link>
         </motion.div>
 
-        {/* Stats row */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-16 flex items-center gap-8"
-        >
-          {[
-            { value: "98.2%", label: "稼働率" },
-            { value: "2.4秒", label: "平均応答時間" },
-            { value: "500+", label: "導入企業" },
-          ].map(({ value, label }) => (
-            <div key={label}>
-              <p className="num text-[1.6rem] font-extrabold text-white/75 leading-none tracking-tight">{value}</p>
-              <p className="text-[11px] text-white/28 mt-1 font-medium">{label}</p>
-            </div>
-          ))}
-        </motion.div>
       </section>
 
       {/* Footer */}
