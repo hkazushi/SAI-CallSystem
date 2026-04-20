@@ -322,6 +322,143 @@ export const mockCallTrend = [
   { date: "04/16", calls: 43, resolved: 35 },
 ];
 
+// ── テンプレート ─────────────────────────────────────────────────
+export const mockTemplates = [
+  {
+    id: "tpl-001",
+    slug: "template-fiber",
+    name: "光回線 乗り換え提案",
+    industry: "通信",
+    description: "光回線の乗り換えメリットを訴求し、訪問アポを取得するアウトバウンドテンプレート。",
+    default_provider: "vapi" as const,
+    preview_audio_url: null,
+    is_public: true,
+    scenario: {
+      purpose: "光回線乗り換えアポ取り",
+      industry: "通信",
+      product: { name: "ひかりネクスト", price: "月額4,200円〜", features: ["最大10Gbps", "工事費無料", "乗り換え割引"] },
+      first_message: "こんにちは、現在ご利用中のインターネット回線について、より快適にご利用いただけるプランのご案内でお電話しました。",
+      goals: ["訪問アポ取得", "現状ヒアリング"],
+      faq: [
+        { question: "今の回線と何が違うの？", answer: "速度が最大10Gbpsに向上し、月額料金も現在よりお安くなる可能性がございます。" },
+        { question: "工事は必要？", answer: "基本的に工事は無料で、所要時間は約1時間です。" },
+      ],
+    },
+  },
+  {
+    id: "tpl-002",
+    slug: "template-waterserver",
+    name: "ウォーターサーバー 案内",
+    industry: "食品・飲料",
+    description: "ウォーターサーバーの無料お試しキャンペーンを案内するアウトバウンドテンプレート。",
+    default_provider: "vapi" as const,
+    preview_audio_url: null,
+    is_public: true,
+    scenario: {
+      purpose: "無料お試し申込",
+      industry: "飲料",
+      product: { name: "ピュアウォーター", price: "サーバーレンタル無料 / 水代 月額2,900円〜", features: ["天然水", "冷温両対応", "チャイルドロック"] },
+      first_message: "こんにちは、天然水のウォーターサーバーについて特別キャンペーンのご案内です。",
+      goals: ["お試し申込", "資料送付"],
+      faq: [
+        { question: "解約金はある？", answer: "最低利用期間1年以内の解約は5,000円の手数料がかかります。" },
+      ],
+    },
+  },
+  {
+    id: "tpl-003",
+    slug: "template-appointment",
+    name: "汎用アポイントメント取得",
+    industry: "汎用",
+    description: "業種を問わず使える汎用的なアポ取りテンプレート。商材情報を埋めるだけで利用可能。",
+    default_provider: "vapi" as const,
+    preview_audio_url: null,
+    is_public: true,
+    scenario: {
+      purpose: "アポイントメント取得",
+      industry: "汎用",
+      product: { name: "（商材名を入力）", price: "（価格を入力）", features: ["（特長1）", "（特長2）"] },
+      first_message: "こんにちは、{{company_name}}の{{agent_name}}と申します。{{product_name}}についてご案内のお電話です。",
+      goals: ["アポ取得"],
+      faq: [],
+    },
+  },
+  {
+    id: "tpl-004",
+    slug: "template-inbound-faq",
+    name: "インバウンド FAQ応答",
+    industry: "カスタマーサポート",
+    description: "よくある質問に自動回答するインバウンド対応テンプレート。Dialogflow CXベース。",
+    default_provider: "dialogflow_cx" as const,
+    preview_audio_url: null,
+    is_public: true,
+    scenario: {
+      purpose: "FAQ自動応答",
+      industry: "カスタマーサポート",
+      product: { name: "（サービス名を入力）", price: "", features: ["FAQ自動応答", "営業時間外案内", "有人転送"] },
+      first_message: "お電話ありがとうございます。{{company_name}}のサポートセンターです。ご用件をお聞かせください。",
+      goals: ["問い合わせ解決", "有人転送判断"],
+      faq: [],
+    },
+  },
+  {
+    id: "tpl-005",
+    slug: "template-order-status",
+    name: "注文ステータス確認",
+    industry: "EC・物流",
+    description: "注文番号から配送状況を自動確認するインバウンドテンプレート。Dialogflow CXベース。",
+    default_provider: "dialogflow_cx" as const,
+    preview_audio_url: null,
+    is_public: true,
+    scenario: {
+      purpose: "注文ステータス照会",
+      industry: "EC",
+      product: { name: "注文照会サービス", price: "", features: ["注文番号検索", "配送状況確認", "再配達手配"] },
+      first_message: "お電話ありがとうございます。ご注文に関するお問い合わせですね。注文番号をお教えください。",
+      goals: ["配送状況回答"],
+      faq: [
+        { question: "届かないんですが", answer: "ご注文番号をお教えいただければ、配送状況をお調べいたします。" },
+      ],
+    },
+  },
+];
+
+// ── シナリオドラフト(壁打ち途中状態) ──────────────────────────────
+export const mockScenarioDrafts = [
+  {
+    id: "draft-001",
+    tenant_id: "tenant-001",
+    project_id: "proj-001",
+    conversation: [
+      { role: "assistant", content: "こんにちは！チャッピーです。AIコールエージェントの構築をお手伝いします。まず、どのような目的のお電話ですか？\n\nA. 新規のお客様へのアポ取り\nB. 既存のお客様へのフォローアップ\nC. お問い合わせ対応\nD. その他" },
+      { role: "user", content: "Aの新規アポ取りです。クラウド会計ソフトの新規獲得キャンペーンです。" },
+      { role: "assistant", content: "クラウド会計ソフトの新規獲得ですね！次に、商材の詳細を教えてください。\n\n1. 商品名は何ですか？\n2. 価格帯はどのくらいですか？" },
+      { role: "user", content: "商品名は「クラウド会計ソフトA」、月額3,000円〜です。" },
+    ],
+    scenario: {
+      purpose: "新規獲得アポ取り",
+      industry: "SaaS",
+      product: { name: "クラウド会計ソフトA", price: "月額3,000円〜", features: ["自動仕訳", "確定申告対応", "モバイル対応"] },
+      first_message: "こんにちは、株式会社サンプルの田中と申します。クラウド会計ソフトのご案内でお電話しております。",
+      goals: ["アポ取得", "資料送付"],
+    },
+    is_finalized: true,
+  },
+];
+
+// ── チャッピーデモ会話 ────────────────────────────────────────────
+export const chappieGreeting = `こんにちは！**チャッピー**です 🤖
+
+AIコールエージェントの構築をお手伝いします。いくつか質問させていただきながら、最適なコールシナリオを一緒に作っていきましょう。
+
+まず、このプロジェクトで行いたい電話の**目的**を教えてください。
+
+**A.** 新規のお客様へのアポ取り
+**B.** 既存のお客様へのフォローアップ
+**C.** お問い合わせ対応（インバウンド）
+**D.** ヒアリング・アンケート
+**E.** その他`;
+
 export const mockCredentials = [
   {
     id: "cred-001",

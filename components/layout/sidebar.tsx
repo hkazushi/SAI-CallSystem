@@ -13,6 +13,7 @@ import {
   Phone,
   Zap,
   LogOut,
+  BookTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,6 +29,7 @@ import { motion } from "framer-motion";
 const mainNav = [
   { href: "/dashboard", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/projects", label: "プロジェクト", icon: Layers },
+  { href: "/templates", label: "テンプレート", icon: BookTemplate },
   { href: "/lists", label: "リスト管理", icon: Database },
   { href: "/calls", label: "通話ログ", icon: PhoneCall },
 ];
