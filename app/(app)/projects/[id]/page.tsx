@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { mockProjects, mockCallLogs } from "@/lib/mock-data";
-import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code } from "lucide-react";
+import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code, MessageCircle } from "lucide-react";
 
 const statusConfig = {
   active:    { label: "稼働中", color: "text-emerald-400", bg: "bg-emerald-400/10" },
@@ -59,11 +59,23 @@ export default function ProjectDetailPage() {
             </Button>
           </Link>
         ) : (
-          <Link href={`/projects/${project.id}/flow`}>
-            <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
-              <GitBranch className="w-3.5 h-3.5 mr-1.5" />フロー編集
-            </Button>
-          </Link>
+          <>
+            <Link href={`/projects/${project.id}/dfcx`}>
+              <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+                <Code className="w-3.5 h-3.5 mr-1.5" />Agent設定
+              </Button>
+            </Link>
+            <Link href={`/projects/${project.id}/flow`}>
+              <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+                <GitBranch className="w-3.5 h-3.5 mr-1.5" />フロー可視化
+              </Button>
+            </Link>
+            <Link href={`/projects/${project.id}/test`}>
+              <Button variant="outline" size="sm" className="border-emerald-400/30 text-emerald-400 hover:bg-emerald-400/5 h-8 text-xs">
+                <MessageCircle className="w-3.5 h-3.5 mr-1.5" />テスト会話
+              </Button>
+            </Link>
+          </>
         )}
         <Link href={`/projects/${project.id}/builder`}>
           <Button variant="outline" size="sm" className="border-primary/30 text-primary hover:bg-primary/5 h-8 text-xs">
@@ -197,7 +209,10 @@ export default function ProjectDetailPage() {
               { href: `/projects/${project.id}/content`, icon: FileText, label: "コール対応設定", desc: "シナリオ・FAQ・エスカレーション" },
               ...(project.ai_provider === "vapi"
                 ? [{ href: `/projects/${project.id}/prompt`, icon: Code, label: "システムプロンプト", desc: "Vapiシステムプロンプトを直接編集" }]
-                : [{ href: `/projects/${project.id}/flow`, icon: GitBranch, label: "トークフローエディタ", desc: "DFCX会話フローを視覚的に設計" }]
+                : [
+                    { href: `/projects/${project.id}/dfcx`, icon: Code, label: "DFCX Agent設定", desc: "Intent・Page・Entityを一覧" },
+                    { href: `/projects/${project.id}/flow`, icon: GitBranch, label: "フロー可視化", desc: "Page遷移を視覚的に確認" },
+                  ]
               ),
               { href: `/projects/${project.id}/builder`, icon: Wand2, label: "AIビルダー", desc: "設定をAIに構築・デプロイ" },
               { href: `/projects/${project.id}/schedule`, icon: Calendar, label: "スケジュール設定", desc: "発信日時・リスト設定" },

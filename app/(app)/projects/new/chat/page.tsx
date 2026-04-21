@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,14 @@ function getCollectedItems(msgCount: number) {
 }
 
 export default function ChappieChatPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-muted-foreground/40 text-sm">読み込み中...</div>}>
+      <ChappieChatInner />
+    </Suspense>
+  );
+}
+
+function ChappieChatInner() {
   const searchParams = useSearchParams();
   const engine = searchParams.get("engine") ?? "vapi";
   const templateSlug = searchParams.get("template");
@@ -82,6 +90,7 @@ export default function ChappieChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -102,6 +111,7 @@ export default function ChappieChatPage() {
       const key = responseKeys[Math.min(userMsgCount, responseKeys.length - 1)];
       setMessages((prev) => [...prev, { role: "assistant", content: chappieResponses[key] }]);
       setIsTyping(false);
+      if (key === "done") setIsComplete(true);
     }, 800 + Math.random() * 700);
   }
 
@@ -112,7 +122,9 @@ export default function ChappieChatPage() {
     }
   }
 
-  const collected = getCollectedItems(messages.filter((m) => m.role === "user").length);
+  const rawCollected = getCollectedItems(messages.filter((m) => m.role === "user").length);
+  // 完了時は全項目をdone扱いにして進捗を100%にする
+  const collected = isComplete ? rawCollected.map((item) => ({ ...item, done: true })) : rawCollected;
   const doneCount = collected.filter((i) => i.done).length;
   const progress = Math.round((doneCount / collected.length) * 100);
 
@@ -183,8 +195,13 @@ export default function ChappieChatPage() {
           </div>
 
           {/* Bottom CTA */}
-          {progress >= 50 && (
-            <div className="p-4 border-t border-white/5">
+          {(isComplete || progress >= 50) && (
+            <div className="p-4 border-t border-white/5 space-y-2">
+              {isComplete && (
+                <p className="text-[10px] text-emerald-400/80 flex items-center gap-1 leading-tight">
+                  <Check className="w-3 h-3" />収集完了。確認画面で内容をレビューできます
+                </p>
+              )}
               <Link href="/projects/proj-001">
                 <Button className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5">
                   確認画面へ進む <ArrowRight className="w-3 h-3" />
@@ -234,6 +251,23 @@ export default function ChappieChatPage() {
                 </motion.div>
               ))}
             </AnimatePresence>
+
+            {/* Inline CTA after done message */}
+            {isComplete && !isTyping && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+                className="flex gap-3 max-w-[720px]"
+              >
+                <div className="w-7 shrink-0" />
+                <Link href="/projects/proj-001">
+                  <Button className="gradient-bg border-0 hover:opacity-85 h-10 px-5 text-[13px] font-semibold gap-2">
+                    確認画面へ進む <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </Link>
+              </motion.div>
+            )}
 
             {/* Typing indicator */}
             {isTyping && (

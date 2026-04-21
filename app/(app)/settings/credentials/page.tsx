@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { mockCredentials } from "@/lib/mock-data";
-import { Plus, Zap, Bot, Phone, Eye, EyeOff, CheckCircle2, Trash2, AlertCircle } from "lucide-react";
+import { Plus, Zap, Bot, Phone, Eye, EyeOff, CheckCircle2, Trash2, AlertCircle, ExternalLink, Terminal } from "lucide-react";
 
 const providerConfig = {
   vapi:         { icon: Zap, label: "Vapi.ai", color: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
@@ -18,6 +18,19 @@ const providerConfig = {
 export default function CredentialsPage() {
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
   const [addingProvider, setAddingProvider] = useState<string | null>(null);
+  const [dfcxStatus, setDfcxStatus] = useState<{
+    configured: boolean;
+    projectId?: string;
+    location?: string;
+    error?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dfcx/status")
+      .then((r) => r.json())
+      .then(setDfcxStatus)
+      .catch(() => setDfcxStatus({ configured: false, error: "取得に失敗" }));
+  }, []);
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
@@ -26,6 +39,71 @@ export default function CredentialsPage() {
           <Plus className="w-4 h-4 mr-1.5" />認証情報を追加
         </Button>
       </PageHeader>
+
+      {/* DFCX (GCP Service Account) 実環境ステータス */}
+      <Card className={`p-5 border-2 ${dfcxStatus?.configured ? "border-emerald-400/30 bg-emerald-400/5" : "border-amber-400/30 bg-amber-400/5"}`}>
+        <div className="flex items-start gap-4">
+          <div className={`w-10 h-10 rounded-xl ${dfcxStatus?.configured ? "bg-emerald-400/15 border border-emerald-400/30" : "bg-amber-400/15 border border-amber-400/30"} flex items-center justify-center shrink-0`}>
+            <Bot className={`w-5 h-5 ${dfcxStatus?.configured ? "text-emerald-400" : "text-amber-400"}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-sm">Dialogflow CX（実環境）</h3>
+              {dfcxStatus?.configured && (
+                <Badge className="bg-emerald-400/15 text-emerald-400 border-0 text-[10px] h-4 px-1.5">
+                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 inline" />接続可能
+                </Badge>
+              )}
+              {dfcxStatus && !dfcxStatus.configured && (
+                <Badge className="bg-amber-400/15 text-amber-400 border-0 text-[10px] h-4 px-1.5">
+                  未設定
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">GCPサービスアカウントでDFCXエージェントに直接デプロイ・テスト会話します</p>
+
+            {dfcxStatus?.configured ? (
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-background/50 border border-border/30 rounded-lg px-3 py-2">
+                  <p className="text-[10px] text-muted-foreground/60">GCPプロジェクト</p>
+                  <p className="font-mono mt-0.5">{dfcxStatus.projectId}</p>
+                </div>
+                <div className="bg-background/50 border border-border/30 rounded-lg px-3 py-2">
+                  <p className="text-[10px] text-muted-foreground/60">リージョン</p>
+                  <p className="font-mono mt-0.5">{dfcxStatus.location}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2 text-[11px]">
+                <p className="text-amber-400/80">{dfcxStatus?.error ?? "読み込み中..."}</p>
+                <div className="bg-background/70 border border-border/30 rounded-lg p-3 space-y-2">
+                  <p className="font-semibold text-[11px] flex items-center gap-1">
+                    <Terminal className="w-3 h-3" />セットアップ手順
+                  </p>
+                  <ol className="space-y-1 text-muted-foreground/80 list-decimal list-inside">
+                    <li>
+                      <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                        GCPコンソール <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                      でサービスアカウント作成（ロール: <span className="font-mono text-amber-300">Dialogflow API Admin</span>）
+                    </li>
+                    <li>JSON鍵をダウンロード → <span className="font-mono text-amber-300">jq -c . key.json</span> で1行化</li>
+                    <li>
+                      プロジェクトルートに <span className="font-mono text-primary">.env.local</span> を作成し以下を記入:
+                    </li>
+                  </ol>
+                  <pre className="bg-black/40 border border-border/30 rounded px-2 py-1.5 text-[10px] font-mono overflow-x-auto leading-relaxed">
+{`GCP_PROJECT_ID=your-gcp-project-id
+GCP_LOCATION=asia-northeast1
+GCP_SERVICE_ACCOUNT_JSON={"type":"service_account",...}`}
+                  </pre>
+                  <p className="text-muted-foreground/60 text-[10px] pt-1">設定後 <span className="font-mono">npm run dev</span> を再起動</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-400/5 border border-amber-400/20 text-xs text-amber-400">
         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
