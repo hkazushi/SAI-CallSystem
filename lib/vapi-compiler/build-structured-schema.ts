@@ -41,9 +41,14 @@ function toProperty(field: HearingField): JsonSchemaProperty {
     case "boolean":
       return { type: "boolean", description: field.description };
     case "enum":
+      if (!field.options || field.options.length === 0) {
+        throw new Error(
+          `HearingField "${field.key}" is type "enum" but has no options. At least one option is required.`,
+        );
+      }
       return {
         type: "string",
-        enum: field.options ?? [],
+        enum: field.options,
         description: field.description,
       };
   }
