@@ -10,7 +10,8 @@ import { mockTemplates, chappieGreeting } from "@/lib/mock-data";
 import type { WallDiscussionStage } from "@/lib/chappie/types";
 import { STAGE_ORDER } from "@/lib/chappie/types";
 import type { ChappieMessageMetadata } from "@/app/api/chappie/chat/route";
-import { Send, Bot, User, Check, Zap, ArrowRight, Sparkles } from "lucide-react";
+import type { ChappieOutput } from "@/lib/vapi-compiler/types";
+import { Send, Bot, User, Check, Zap, ArrowRight, Sparkles, Loader2, ExternalLink, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ChappieUIMessage = UIMessage<ChappieMessageMetadata>;
@@ -73,9 +74,17 @@ export default function ChappieChatPage() {
   });
 
   const [input, setInput] = useState("");
+  const [deployState, setDeployState] = useState<
+    | { kind: "idle" }
+    | { kind: "extracting" }
+    | { kind: "deploying" }
+    | { kind: "success"; assistantId: string; name: string }
+    | { kind: "error"; error: string }
+  >({ kind: "idle" });
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isBusy = status === "submitted" || status === "streaming";
+  const isDeploying = deployState.kind === "extracting" || deployState.kind === "deploying";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -119,6 +128,47 @@ export default function ChappieChatPage() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  }
+
+  async function handleDeployToVapi() {
+    if (isDeploying || deployState.kind === "success") return;
+
+    setDeployState({ kind: "extracting" });
+    try {
+      const extractRes = await fetch("/api/chappie/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages }),
+      });
+      if (!extractRes.ok) {
+        const err = (await extractRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? `extract failed: ${extractRes.status}`);
+      }
+      const { output } = (await extractRes.json()) as { output: ChappieOutput };
+
+      setDeployState({ kind: "deploying" });
+      const projectId = `new-${Date.now()}`;
+      const deployRes = await fetch(`/api/projects/${projectId}/deploy-vapi`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ output, tenantId: "tenant-001" }),
+      });
+      if (!deployRes.ok) {
+        const err = (await deployRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? `deploy failed: ${deployRes.status}`);
+      }
+      const result = (await deployRes.json()) as { assistantId: string; name: string };
+      setDeployState({
+        kind: "success",
+        assistantId: result.assistantId,
+        name: result.name,
+      });
+    } catch (err) {
+      setDeployState({
+        kind: "error",
+        error: err instanceof Error ? err.message : "unknown error",
+      });
     }
   }
 
@@ -199,15 +249,75 @@ export default function ChappieChatPage() {
             </div>
           </div>
 
-          {(progress >= 50 || reachedReview) && (
+          {reachedReview ? (
+            <div className="p-4 border-t border-white/5 space-y-2">
+              {deployState.kind === "success" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-emerald-400 text-[12px] font-semibold">
+                    <Check className="w-3 h-3" />
+                    Vapi Assistant 作成完了
+                  </div>
+                  <div className="rounded-md bg-white/5 p-2 space-y-1">
+                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">name</p>
+                    <p className="text-[11px] font-medium break-all">{deployState.name}</p>
+                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">assistantId</p>
+                    <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
+                      {deployState.assistantId}
+                    </p>
+                  </div>
+                  <a
+                    href={`https://dashboard.vapi.ai/assistants/${deployState.assistantId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block"
+                  >
+                    <Button className="w-full h-9 text-[12px] font-semibold gap-1.5" variant="outline">
+                      Vapi管理画面で開く <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  </a>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    onClick={handleDeployToVapi}
+                    disabled={isDeploying}
+                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                  >
+                    {deployState.kind === "extracting" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        情報を抽出中…
+                      </>
+                    ) : deployState.kind === "deploying" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Vapiへ送信中…
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3 h-3" />
+                        Vapi Assistant を作成
+                      </>
+                    )}
+                  </Button>
+                  {deployState.kind === "error" && (
+                    <div className="flex items-start gap-1.5 text-[11px] text-red-400 bg-red-500/5 border border-red-500/15 rounded-md p-2">
+                      <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                      <p className="break-words">{deployState.error}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : progress >= 50 ? (
             <div className="p-4 border-t border-white/5">
               <Link href="/projects/proj-001">
                 <Button className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5">
-                  {reachedReview ? "確認画面へ進む" : "一時保存して進む"} <ArrowRight className="w-3 h-3" />
+                  一時保存して進む <ArrowRight className="w-3 h-3" />
                 </Button>
               </Link>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Chat area */}
