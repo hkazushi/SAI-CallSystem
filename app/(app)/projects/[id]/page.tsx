@@ -1,5 +1,5 @@
 "use client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ function formatDate(iso: string) {
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const project = mockProjects.find((p) => p.id === id) ?? mockProjects[0];
   const status = statusConfig[project.status];
   const recentCalls = mockCallLogs.filter((c) => c.project_id === project.id).slice(0, 10);
@@ -237,19 +238,21 @@ export default function ProjectDetailPage() {
                 {recentCalls.map((call) => {
                   const outcome = outcomeLabels[call.outcome as string] ?? { label: call.outcome as string, color: "text-muted-foreground" };
                   return (
-                    <Link key={call.id} href={`/calls/${call.id}`} legacyBehavior>
-                      <tr className="border-b border-border/10 hover:bg-white/2 cursor-pointer">
-                        <td className="px-5 py-3 font-mono text-xs">{call.direction === "inbound" ? call.caller_number : call.called_number}</td>
-                        <td className="px-5 py-3">
-                          <Badge variant="outline" className={`text-[10px] h-4 px-1.5 border-border/30 ${call.direction === "inbound" ? "text-blue-400" : "text-violet-400"}`}>
-                            {call.direction === "inbound" ? "IB" : "OB"}
-                          </Badge>
-                        </td>
-                        <td className={`px-5 py-3 text-xs font-medium ${outcome.color}`}>{outcome.label}</td>
-                        <td className="px-5 py-3 text-xs text-muted-foreground">{call.duration_seconds}秒</td>
-                        <td className="px-5 py-3 text-xs text-muted-foreground">{formatDate(call.started_at)}</td>
-                      </tr>
-                    </Link>
+                    <tr
+                      key={call.id}
+                      onClick={() => router.push(`/calls/${call.id}`)}
+                      className="border-b border-border/10 hover:bg-white/2 cursor-pointer"
+                    >
+                      <td className="px-5 py-3 font-mono text-xs">{call.direction === "inbound" ? call.caller_number : call.called_number}</td>
+                      <td className="px-5 py-3">
+                        <Badge variant="outline" className={`text-[10px] h-4 px-1.5 border-border/30 ${call.direction === "inbound" ? "text-blue-400" : "text-violet-400"}`}>
+                          {call.direction === "inbound" ? "IB" : "OB"}
+                        </Badge>
+                      </td>
+                      <td className={`px-5 py-3 text-xs font-medium ${outcome.color}`}>{outcome.label}</td>
+                      <td className="px-5 py-3 text-xs text-muted-foreground">{call.duration_seconds}秒</td>
+                      <td className="px-5 py-3 text-xs text-muted-foreground">{formatDate(call.started_at)}</td>
+                    </tr>
                   );
                 })}
               </tbody>

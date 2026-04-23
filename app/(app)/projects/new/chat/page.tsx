@@ -1,17 +1,30 @@
 "use client";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Button } from "@/components/ui/button";
 import { PageTransition } from "@/components/ui/page-transition";
-import { mockTemplates, chappieGreeting } from "@/lib/mock-data";
+import { getTemplate } from "@/lib/templates";
 import type { WallDiscussionStage } from "@/lib/chappie/types";
 import { STAGE_ORDER } from "@/lib/chappie/types";
 import type { ChappieMessageMetadata } from "@/app/api/chappie/chat/route";
 import type { ChappieOutput } from "@/lib/vapi-compiler/types";
-import { Send, Bot, User, Check, Zap, ArrowRight, Sparkles, Loader2, ExternalLink, AlertCircle } from "lucide-react";
+import { FileUploadZone, type AttachedFile } from "@/components/chappie/FileUploadZone";
+import { VapiCallWidget } from "@/components/vapi-call-widget";
+import {
+  Send,
+  Bot,
+  User,
+  Check,
+  Zap,
+  Sparkles,
+  Loader2,
+  ExternalLink,
+  AlertCircle,
+  FileText,
+  Trash2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ChappieUIMessage = UIMessage<ChappieMessageMetadata>;
@@ -53,25 +66,136 @@ function renderText(text: string) {
   });
 }
 
-const initialMessages: ChappieUIMessage[] = [
-  {
-    id: "chappie-greeting",
-    role: "assistant",
-    parts: [{ type: "text", text: chappieGreeting }],
-    metadata: { stage: "discovery" },
-  },
-];
+function buildGreeting(templateName: string | null): string {
+  if (templateName) {
+    return `こんにちは！Chappieです。「${templateName}」テンプレートをベースに、御社の音声AIエージェントを一緒に作っていきます。
+
+まずはこちらから3つ確認させてください：
+(1) 御社の主な業態・取り扱う商材は、このテンプレート想定と大きく違う部分はありますか？
+(2) 既に使っているトークスクリプトや商材資料があれば、左の「資料アップロード」からドラッグ&ドロップしてください。内容を踏まえて設計します。
+(3) 今回のAIで「これだけは絶対に実現したい」ゴールを一言で教えてください。
+
+どれから話しましょうか？`;
+  }
+  return `こんにちは！Chappieです。音声AIエージェントを一緒に作っていきます。
+
+まずはざっくりで良いので、どんな業種・どんな電話業務を自動化したいか教えてください。業界のプロ目線で先回りして提案していきます！`;
+}
 
 export default function ChappieChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[calc(100vh-1px)] items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" />
+        </div>
+      }
+    >
+      <ChappieChatInner />
+    </Suspense>
+  );
+}
+
+function ChappieChatInner() {
   const searchParams = useSearchParams();
   const engine = searchParams.get("engine") ?? "vapi";
-  const templateSlug = searchParams.get("template");
-  const template = templateSlug ? mockTemplates.find((t) => t.slug === templateSlug) : null;
+  const templateId = searchParams.get("template");
+  const template = templateId ? getTemplate(templateId) : undefined;
 
-  const { messages, sendMessage, status } = useChat<ChappieUIMessage>({
-    transport: new DefaultChatTransport({ api: "/api/chappie/chat" }),
+  const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+
+  const readyAttachments = useMemo(
+    () =>
+      attachments
+        .filter((a) => a.status === "ready")
+        .map((a) => ({
+          filename: a.filename,
+          text: a.text,
+          charCount: a.charCount,
+        })),
+    [attachments],
+  );
+
+  const storageKey = useMemo(
+    () => `chappie-chat-${templateId ?? "no-template"}`,
+    [templateId],
+  );
+
+  const initialMessages = useMemo<ChappieUIMessage[]>(
+    () => [
+      {
+        id: "chappie-greeting",
+        role: "assistant",
+        parts: [{ type: "text", text: buildGreeting(template?.displayName ?? null) }],
+        metadata: { stage: "discovery" },
+      },
+    ],
+    [template],
+  );
+
+  const { messages, sendMessage, setMessages, status } = useChat<ChappieUIMessage>({
+    transport: new DefaultChatTransport({
+      api: "/api/chappie/chat",
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          messages,
+          templateId: template?.id,
+          attachments: readyAttachments,
+        },
+      }),
+    }),
     messages: initialMessages,
   });
+
+  const [storageHydrated, setStorageHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ChappieUIMessage[];
+        if (Array.isArray(parsed) && parsed.length > 1) {
+          setMessages(parsed);
+        }
+      }
+    } catch {
+      // stale data or storage blocked — keep greeting
+    } finally {
+      setStorageHydrated(true);
+    }
+  }, [storageKey, setMessages]);
+
+  useEffect(() => {
+    if (!storageHydrated) return;
+    if (messages.length <= 1) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      // quota exceeded or storage disabled — silently skip
+    }
+  }, [messages, storageKey, storageHydrated]);
+
+  function handleResetConversation() {
+    if (typeof window === "undefined") return;
+    const ok = window.confirm(
+      "会話履歴をリセットして最初からやり直しますか？（元に戻せません）",
+    );
+    if (!ok) return;
+    try {
+      window.localStorage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+    setMessages([
+      {
+        id: "chappie-greeting",
+        role: "assistant",
+        parts: [{ type: "text", text: buildGreeting(template?.displayName ?? null) }],
+        metadata: { stage: "discovery" },
+      },
+    ]);
+    setDeployState({ kind: "idle" });
+  }
 
   const [input, setInput] = useState("");
   const [deployState, setDeployState] = useState<
@@ -139,7 +263,11 @@ export default function ChappieChatPage() {
       const extractRes = await fetch("/api/chappie/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({
+          messages,
+          templateId: template?.id,
+          attachments: readyAttachments,
+        }),
       });
       if (!extractRes.ok) {
         const err = (await extractRes.json().catch(() => ({}))) as { error?: string };
@@ -172,80 +300,117 @@ export default function ChappieChatPage() {
     }
   }
 
+  const totalTokens = readyAttachments.reduce((s, a) => s + Math.ceil(a.charCount / 3), 0);
+
   return (
     <PageTransition>
       <div className="flex h-[calc(100vh-1px)] overflow-hidden">
         {/* Left sidebar — project info */}
-        <div className="w-64 shrink-0 border-r border-white/5 bg-card/30 flex flex-col">
+        <div className="w-72 shrink-0 border-r border-white/5 bg-card/30 flex flex-col">
           <div className="p-4 border-b border-white/5">
-            <p className="text-[10px] tracking-[0.13em] uppercase text-muted-foreground/40 font-medium">新規プロジェクト</p>
+            <p className="text-[10px] tracking-[0.13em] uppercase text-muted-foreground/40 font-medium">
+              新規プロジェクト
+            </p>
             <p className="text-[13px] font-semibold mt-1">チャッピー壁打ち</p>
           </div>
 
-          <div className="p-4 space-y-3">
-            <div>
-              <p className="text-[10px] text-muted-foreground/40 mb-1">AIエンジン</p>
-              <div className="flex items-center gap-1.5">
-                {engine === "vapi" ? (
-                  <>
-                    <Zap className="w-3 h-3 text-amber-400" />
-                    <span className="text-[12px] font-medium">Vapi.ai（柔軟型）</span>
-                  </>
-                ) : (
-                  <>
-                    <Bot className="w-3 h-3 text-blue-400" />
-                    <span className="text-[12px] font-medium">Dialogflow CX（厳格型）</span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {template && (
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 space-y-4">
+              {/* AIエンジン */}
               <div>
-                <p className="text-[10px] text-muted-foreground/40 mb-1">テンプレート</p>
-                <p className="text-[12px] font-medium">{template.name}</p>
+                <p className="text-[10px] text-muted-foreground/40 mb-1">AIエンジン</p>
+                <div className="flex items-center gap-1.5">
+                  {engine === "vapi" ? (
+                    <>
+                      <Zap className="w-3 h-3 text-amber-400" />
+                      <span className="text-[12px] font-medium">Vapi.ai（柔軟型）</span>
+                    </>
+                  ) : (
+                    <>
+                      <Bot className="w-3 h-3 text-blue-400" />
+                      <span className="text-[12px] font-medium">Dialogflow CX（厳格型）</span>
+                    </>
+                  )}
+                </div>
               </div>
-            )}
 
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] text-muted-foreground/40">収集進捗</p>
-                <span className="text-[11px] font-bold num text-primary">{progress}%</span>
-              </div>
-              <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-primary"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
+              {/* Template */}
+              {template && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground/40 mb-1">テンプレート</p>
+                  <div className="rounded-md border border-primary/15 bg-primary/5 px-2.5 py-2">
+                    <p className="text-[12px] font-semibold text-foreground/90">
+                      {template.displayName}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5 line-clamp-2">
+                      {template.description}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* File upload */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] text-muted-foreground/40">資料アップロード</p>
+                  {readyAttachments.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground/50 num">
+                      {totalTokens.toLocaleString()} tok
+                    </span>
+                  )}
+                </div>
+                <FileUploadZone
+                  files={attachments}
+                  onFilesChange={setAttachments}
+                  maxFiles={5}
+                  disabled={isBusy}
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground/40 mt-2">
-                ステージ: <span className="text-foreground/80">{currentStage}</span>
-              </p>
-            </div>
-          </div>
 
-          <div className="flex-1 overflow-y-auto p-4 pt-2">
-            <p className="text-[10px] text-muted-foreground/40 mb-2 font-medium uppercase tracking-wide">収集済み項目</p>
-            <div className="space-y-1">
-              {collected.map((item) => (
-                <div
-                  key={item.key}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] ${
-                    item.done ? "text-foreground" : "text-muted-foreground/30"
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                      item.done ? "bg-emerald-400/15" : "border border-white/10"
-                    }`}
-                  >
-                    {item.done && <Check className="w-2.5 h-2.5 text-emerald-400" />}
-                  </div>
-                  {item.label}
+              {/* Progress */}
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] text-muted-foreground/40">収集進捗</p>
+                  <span className="text-[11px] font-bold num text-primary">{progress}%</span>
                 </div>
-              ))}
+                <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                  ステージ: <span className="text-foreground/80">{currentStage}</span>
+                </p>
+              </div>
+
+              {/* Collected items */}
+              <div>
+                <p className="text-[10px] text-muted-foreground/40 mb-2 font-medium uppercase tracking-wide">
+                  収集済み項目
+                </p>
+                <div className="space-y-1">
+                  {collected.map((item) => (
+                    <div
+                      key={item.key}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] ${
+                        item.done ? "text-foreground" : "text-muted-foreground/30"
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                          item.done ? "bg-emerald-400/15" : "border border-white/10"
+                        }`}
+                      >
+                        {item.done && <Check className="w-2.5 h-2.5 text-emerald-400" />}
+                      </div>
+                      {item.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -258,21 +423,34 @@ export default function ChappieChatPage() {
                     Vapi Assistant 作成完了
                   </div>
                   <div className="rounded-md bg-white/5 p-2 space-y-1">
-                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">name</p>
+                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">
+                      name
+                    </p>
                     <p className="text-[11px] font-medium break-all">{deployState.name}</p>
-                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">assistantId</p>
+                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">
+                      assistantId
+                    </p>
                     <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
                       {deployState.assistantId}
                     </p>
                   </div>
+                  <VapiCallWidget
+                    assistantId={deployState.assistantId}
+                    assistantName={deployState.name}
+                    triggerLabel="テスト通話する"
+                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold justify-center"
+                  />
                   <a
                     href={`https://dashboard.vapi.ai/assistants/${deployState.assistantId}`}
                     target="_blank"
                     rel="noreferrer"
                     className="block"
                   >
-                    <Button className="w-full h-9 text-[12px] font-semibold gap-1.5" variant="outline">
-                      Vapi管理画面で開く <ExternalLink className="w-3 h-3" />
+                    <Button
+                      className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground"
+                      variant="ghost"
+                    >
+                      管理画面で開く（管理者用） <ExternalLink className="w-3 h-3" />
                     </Button>
                   </a>
                 </div>
@@ -309,20 +487,39 @@ export default function ChappieChatPage() {
                 </>
               )}
             </div>
-          ) : progress >= 50 ? (
+          ) : (
             <div className="p-4 border-t border-white/5">
-              <Link href="/projects/proj-001">
-                <Button className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5">
-                  一時保存して進む <ArrowRight className="w-3 h-3" />
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                onClick={handleResetConversation}
+                className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground"
+              >
+                <Trash2 className="w-3 h-3" /> 会話をリセット
+              </Button>
+              <p className="text-[10px] text-muted-foreground/40 mt-2 leading-relaxed">
+                ブラウザを閉じたり更新しても会話は自動保存されます
+              </p>
             </div>
-          ) : null}
+          )}
         </div>
 
         {/* Chat area */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+            {/* Attachments summary chip */}
+            {readyAttachments.length > 0 && (
+              <div className="max-w-[720px] rounded-lg border border-white/5 bg-white/3 px-3 py-2 flex items-center gap-2 text-[11px] text-muted-foreground/70">
+                <FileText className="w-3 h-3 text-primary/70" />
+                <span>
+                  {readyAttachments.length} 件の資料を参照中（合計{" "}
+                  {readyAttachments
+                    .reduce((s, a) => s + a.charCount, 0)
+                    .toLocaleString()}{" "}
+                  文字）
+                </span>
+              </div>
+            )}
+
             <AnimatePresence initial={false}>
               {messages.map((msg) => {
                 const text = msg.parts
@@ -410,7 +607,9 @@ export default function ChappieChatPage() {
                 <Send className="w-4 h-4" />
               </Button>
             </div>
-            <p className="text-center text-[10px] text-muted-foreground/25 mt-2">Shift + Enter で改行 / Enter で送信</p>
+            <p className="text-center text-[10px] text-muted-foreground/25 mt-2">
+              Shift + Enter で改行 / Enter で送信
+            </p>
           </div>
         </div>
       </div>
