@@ -8,6 +8,7 @@
  * Response:      AI SDK UI message stream (SSE) — messageMetadata に現在 stage を載せる
  */
 import { streamText, convertToModelMessages, type UIMessage } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { NextResponse } from "next/server";
 import { CHAPPIE_META_PROMPT, buildStageDirective } from "@/lib/chappie/meta-prompt";
 import { detectStage } from "@/lib/chappie/stage-detector";
@@ -43,15 +44,10 @@ export async function POST(req: Request) {
   );
 
   const result = streamText({
-    model: "openai/gpt-5.4",
+    model: anthropic("claude-opus-4-7"),
     system: `${CHAPPIE_META_PROMPT}\n\n${buildStageDirective(stage)}`,
     messages: modelMessages,
     temperature: 0.6,
-    providerOptions: {
-      gateway: {
-        tags: ["feature:chappie-chat", "env:dev"],
-      },
-    },
   });
 
   return result.toUIMessageStreamResponse({

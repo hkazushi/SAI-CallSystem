@@ -1,10 +1,11 @@
 /**
  * 会話履歴 → ChappieOutput への構造化抽出。
  *
- * Vercel AI SDK の generateObject + zod で、LLM に ChappieOutput 相当の JSON を吐かせる。
- * ここは「レビュー段階」でユーザが「OK」と言ったタイミングで呼び出す。
+ * AI SDK v6 移行: generateObject は非推奨 → generateText + Output.object({ schema }) を使う。
+ * 直接 Anthropic SDK 呼び出しで Sonnet 4.6 を使用。抽出はタスク境界が明確なので Opus 相当は不要。
  */
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import type { ChappieOutput } from "../vapi-compiler/types";
 
@@ -52,9 +53,9 @@ JSON に構造化して抜き出すアシスタントです。
 export async function extractChappieOutput(
   messages: { role: "user" | "assistant"; content: string }[],
 ): Promise<ChappieOutput> {
-  const { object } = await generateObject({
-    model: "openai/gpt-5.4",
-    schema: chappieOutputSchema,
+  const result = await generateText({
+    model: anthropic("claude-sonnet-4-6"),
+    output: Output.object({ schema: chappieOutputSchema }),
     system: EXTRACTION_PROMPT,
     messages: [
       {
@@ -62,14 +63,9 @@ export async function extractChappieOutput(
         content: `以下の壁打ち会話ログから ChappieOutput を抽出してください。\n\n${formatConversation(messages)}`,
       },
     ],
-    providerOptions: {
-      gateway: {
-        tags: ["feature:chappie-extract", "env:dev"],
-      },
-    },
   });
 
-  return object;
+  return result.output;
 }
 
 function formatConversation(messages: { role: string; content: string }[]): string {
