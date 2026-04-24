@@ -8,6 +8,7 @@ import { PageTransition } from "@/components/ui/page-transition";
 import { getTemplate } from "@/lib/templates";
 import type { WallDiscussionStage } from "@/lib/chappie/types";
 import { STAGE_ORDER } from "@/lib/chappie/types";
+import { parseChoices } from "@/lib/chappie/quick-replies";
 import type { ChappieMessageMetadata } from "@/app/api/chappie/chat/route";
 import type { ChappieOutput } from "@/lib/vapi-compiler/types";
 import { FileUploadZone, type AttachedFile } from "@/components/chappie/FileUploadZone";
@@ -573,11 +574,20 @@ function ChappieChatInner() {
             )}
 
             <AnimatePresence initial={false}>
-              {messages.map((msg) => {
-                const text = msg.parts
+              {messages.map((msg, idx) => {
+                const rawText = msg.parts
                   .filter((p): p is { type: "text"; text: string } => p.type === "text")
                   .map((p) => p.text)
                   .join("");
+                const { cleanText, choices } =
+                  msg.role === "assistant"
+                    ? parseChoices(rawText)
+                    : { cleanText: rawText, choices: [] as string[] };
+                const isLastAssistant =
+                  msg.role === "assistant" &&
+                  idx === messages.length - 1 &&
+                  !isBusy &&
+                  choices.length > 0;
                 return (
                   <motion.div
                     key={msg.id}
@@ -597,14 +607,36 @@ function ChappieChatInner() {
                         <User className="w-3.5 h-3.5 text-white/50" />
                       )}
                     </div>
-                    <div
-                      className={`rounded-xl px-4 py-3 text-[13px] leading-relaxed max-w-[560px] ${
-                        msg.role === "assistant"
-                          ? "bg-card/60 border border-white/5"
-                          : "bg-primary/10 border border-primary/15"
-                      }`}
-                    >
-                      {renderText(text)}
+                    <div className="flex flex-col gap-2 max-w-[560px]">
+                      <div
+                        className={`rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
+                          msg.role === "assistant"
+                            ? "bg-card/60 border border-white/5"
+                            : "bg-primary/10 border border-primary/15"
+                        }`}
+                      >
+                        {renderText(cleanText)}
+                      </div>
+                      {isLastAssistant && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {choices.map((choice) => (
+                            <button
+                              key={choice}
+                              type="button"
+                              onClick={() => {
+                                if (isBusy) return;
+                                sendMessage({ text: choice });
+                              }}
+                              className="px-3 py-1.5 rounded-full border border-primary/25 bg-primary/8 hover:bg-primary/15 hover:border-primary/40 text-[12px] text-foreground/90 transition-colors text-left"
+                            >
+                              {choice}
+                            </button>
+                          ))}
+                          <span className="px-3 py-1.5 rounded-full border border-white/10 bg-white/3 text-[11px] text-muted-foreground/60 self-center">
+                            または下に自由記入
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
