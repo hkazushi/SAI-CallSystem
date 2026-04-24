@@ -133,6 +133,66 @@ const ENGINE_OPTIONS: Array<{
   },
 ];
 
+/**
+ * 業界 × 方向 の組み合わせごとに、おすすめエンジンと推奨理由を定義。
+ * ユーザーが悩まないよう、エンジン選択ステップで「✨おすすめ」バッジを付ける。
+ */
+const ENGINE_RECOMMENDATION: Record<
+  Industry,
+  Record<CallDirection, { engine: Engine; reason: string }>
+> = {
+  hikari: {
+    outbound: {
+      engine: "vapi",
+      reason: "光コラボの新規獲得は反応が千差万別。柔軟な切り返しが勝率に直結するためVapi推奨。",
+    },
+    inbound: {
+      engine: "vapi",
+      reason: "サポート問い合わせは質問パターンが広いため、LLM応答のVapiが自然に対応できます。",
+    },
+  },
+  water_server: {
+    outbound: {
+      engine: "vapi",
+      reason: "家庭向け新規営業はヒアリング重視。柔らかい会話でアポ率が上がるVapiが適しています。",
+    },
+    inbound: {
+      engine: "vapi",
+      reason: "解約阻止などの繊細な対応には柔軟なVapiが向いています。",
+    },
+  },
+  insurance: {
+    outbound: {
+      engine: "dialogflow_cx",
+      reason: "保険はコンプライアンスが最重要。トークが完全に制御できるDialogflow CXで安心運用。",
+    },
+    inbound: {
+      engine: "dialogflow_cx",
+      reason: "事故受付・面談予約は定型フローで足りるため、料金が抑えられるDialogflow CXが有利。",
+    },
+  },
+  real_estate: {
+    outbound: {
+      engine: "vapi",
+      reason: "反響追客では条件ヒアリングが肝。Vapiの自然な応答で離脱を防げます。",
+    },
+    inbound: {
+      engine: "vapi",
+      reason: "物件問い合わせは質問が多様。LLMベースのVapiが柔軟に捌けます。",
+    },
+  },
+  hr: {
+    outbound: {
+      engine: "vapi",
+      reason: "求職者ヒアリングは個別性が高く、Vapiの柔軟な対話力が効きます。",
+    },
+    inbound: {
+      engine: "dialogflow_cx",
+      reason: "求人応募受付は項目が定型化できるため、Dialogflow CXでコスト最適化可能。",
+    },
+  },
+};
+
 const DIRECTION_OPTIONS: Array<{
   value: CallDirection;
   label: string;
@@ -353,73 +413,114 @@ export default function TemplatesWizardPage() {
                 </Button>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                {ENGINE_OPTIONS.map((eng) => (
-                  <button
-                    key={eng.value}
-                    onClick={() => {
-                      setEngine(eng.value);
-                      setStep("review");
-                    }}
-                    className={`group text-left rounded-xl border bg-card/40 hover:bg-card/60 transition-all p-5 relative overflow-hidden ${eng.accentColor}`}
-                  >
-                    <div
-                      className={`absolute top-0 right-0 w-32 h-32 rounded-bl-full ${eng.accentBg} opacity-60`}
-                    />
-                    <div className="relative space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-lg flex items-center justify-center ${eng.iconBg}`}
-                        >
-                          <eng.icon className={`w-5 h-5 ${eng.iconColor}`} />
-                        </div>
-                        <div>
-                          <h3 className="text-[14px] font-bold">{eng.label}</h3>
-                          <p className="text-[11px] text-muted-foreground/45">{eng.subtitle}</p>
-                        </div>
-                      </div>
-
-                      <p className="text-[12px] text-muted-foreground/55 leading-relaxed">
-                        {eng.description}
+              {(() => {
+                const rec = ENGINE_RECOMMENDATION[industry][direction];
+                return (
+                  <div className="rounded-xl border border-primary/25 bg-primary/8 p-4 flex items-start gap-3">
+                    <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-primary/70 font-bold tracking-wide uppercase">
+                        あなたの組み合わせへのおすすめ
                       </p>
-
-                      <div className="space-y-1">
-                        {eng.pros.map((p) => (
-                          <div
-                            key={p}
-                            className="flex items-center gap-2 text-[11px] text-emerald-400/75"
-                          >
-                            <Check className="w-3 h-3 shrink-0" />
-                            <span>{p}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="space-y-1">
-                        {eng.cons.map((c) => (
-                          <div
-                            key={c}
-                            className="flex items-center gap-2 text-[11px] text-amber-400/65"
-                          >
-                            <AlertTriangle className="w-3 h-3 shrink-0" />
-                            <span>{c}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="pt-2 border-t border-white/5">
-                        <p className="text-[10px] text-muted-foreground/40 tracking-wide uppercase font-medium mb-1">
-                          想定用途
-                        </p>
-                        <p className="text-[12px] text-muted-foreground/60">{eng.useCases}</p>
-                      </div>
-
-                      <div className="flex items-center gap-1 text-[12px] text-primary/55 group-hover:text-primary font-semibold transition-colors pt-1">
-                        このエンジンで進める <ArrowRight className="w-3.5 h-3.5" />
-                      </div>
+                      <p className="text-[13px] font-semibold text-foreground mt-0.5">
+                        {ENGINE_OPTIONS.find((e) => e.value === rec.engine)?.label} がおすすめです
+                      </p>
+                      <p className="text-[12px] text-muted-foreground/75 leading-relaxed mt-1">
+                        {rec.reason}
+                      </p>
                     </div>
-                  </button>
-                ))}
+                  </div>
+                );
+              })()}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {ENGINE_OPTIONS.map((eng) => {
+                  const isRecommended =
+                    ENGINE_RECOMMENDATION[industry][direction].engine === eng.value;
+                  return (
+                    <button
+                      key={eng.value}
+                      onClick={() => {
+                        setEngine(eng.value);
+                        setStep("review");
+                      }}
+                      className={`group text-left rounded-xl border bg-card/40 hover:bg-card/60 transition-all p-5 relative overflow-hidden ${
+                        isRecommended
+                          ? "border-primary/40 hover:border-primary/60 shadow-[0_0_0_1px_oklch(from_var(--primary)_l_c_h_/_0.25)]"
+                          : eng.accentColor
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0 right-0 w-32 h-32 rounded-bl-full ${eng.accentBg} opacity-60`}
+                      />
+                      {isRecommended && (
+                        <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-primary/15 border border-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          おすすめ
+                        </span>
+                      )}
+                      <div className="relative space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-10 h-10 rounded-lg flex items-center justify-center ${eng.iconBg}`}
+                          >
+                            <eng.icon className={`w-5 h-5 ${eng.iconColor}`} />
+                          </div>
+                          <div>
+                            <h3 className="text-[14px] font-bold">{eng.label}</h3>
+                            <p className="text-[11px] text-muted-foreground/45">{eng.subtitle}</p>
+                          </div>
+                        </div>
+
+                        <p className="text-[12px] text-muted-foreground/55 leading-relaxed">
+                          {eng.description}
+                        </p>
+
+                        <div className="space-y-1">
+                          {eng.pros.map((p) => (
+                            <div
+                              key={p}
+                              className="flex items-center gap-2 text-[11px] text-emerald-400/75"
+                            >
+                              <Check className="w-3 h-3 shrink-0" />
+                              <span>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="space-y-1">
+                          {eng.cons.map((c) => (
+                            <div
+                              key={c}
+                              className="flex items-center gap-2 text-[11px] text-amber-400/65"
+                            >
+                              <AlertTriangle className="w-3 h-3 shrink-0" />
+                              <span>{c}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="pt-2 border-t border-white/5">
+                          <p className="text-[10px] text-muted-foreground/40 tracking-wide uppercase font-medium mb-1">
+                            想定用途
+                          </p>
+                          <p className="text-[12px] text-muted-foreground/60">{eng.useCases}</p>
+                        </div>
+
+                        <div
+                          className={`flex items-center gap-1 text-[12px] font-semibold transition-colors pt-1 ${
+                            isRecommended
+                              ? "text-primary"
+                              : "text-primary/55 group-hover:text-primary"
+                          }`}
+                        >
+                          {isRecommended ? "このエンジンで進める（推奨）" : "このエンジンで進める"}{" "}
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </motion.div>
           )}
