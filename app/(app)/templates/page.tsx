@@ -3,10 +3,11 @@
 /**
  * テンプレート選択ウィザード
  *
- * 3 ステップ:
+ * 4 ステップ:
  *   1. 業界を選ぶ (光回線 / ウォーターサーバー / 保険 / 不動産 / 人材)
  *   2. 方向を選ぶ (アウトバウンド / インバウンド)
- *   3. 一意に決まったテンプレート詳細を表示 → 「このテンプレで壁打ちを始める」
+ *   3. AIエンジンを選ぶ (Vapi.ai / Dialogflow CX)
+ *   4. 一意に決まったテンプレート詳細を表示 → 「このテンプレで壁打ちを始める」
  */
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -32,11 +33,15 @@ import {
   Users,
   MessageSquare,
   Sparkles,
+  Zap,
+  Bot,
+  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LucideIcon } from "lucide-react";
 
-type Step = "industry" | "direction" | "review";
+type Step = "industry" | "direction" | "engine" | "review";
+type Engine = "vapi" | "dialogflow_cx";
 
 const INDUSTRY_OPTIONS: Array<{
   value: Industry;
@@ -82,6 +87,52 @@ const INDUSTRY_OPTIONS: Array<{
   },
 ];
 
+const ENGINE_OPTIONS: Array<{
+  value: Engine;
+  label: string;
+  subtitle: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  useCases: string;
+  icon: LucideIcon;
+  iconColor: string;
+  iconBg: string;
+  accentColor: string;
+  accentBg: string;
+}> = [
+  {
+    value: "vapi",
+    label: "Vapi.ai",
+    subtitle: "柔軟型 — LLMリアルタイム応答",
+    description:
+      "LLMがその場で応答を生成。想定外の質問にも自然に対応できる反面、ハルシネーションのリスクがあります。",
+    pros: ["想定外の会話に柔軟に対応", "シナリオ設計がシンプル", "自然な会話体験"],
+    cons: ["ハルシネーションリスク", "LLM料金が発生"],
+    useCases: "ヒアリング系アウトバウンド、柔らかい一次対応、アポ取り",
+    icon: Zap,
+    iconColor: "text-amber-400",
+    iconBg: "bg-amber-400/10",
+    accentColor: "border-amber-400/25 hover:border-amber-400/40",
+    accentBg: "bg-amber-500/3",
+  },
+  {
+    value: "dialogflow_cx",
+    label: "Dialogflow CX",
+    subtitle: "厳格型 — トークツリー制御",
+    description:
+      "事前設計のトークフロー通りに会話を進めます。絶対にブレない反面、想定外の質問には弱い面があります。",
+    pros: ["応答が完全に制御可能", "コンプライアンス対応が容易", "LLM料金なし"],
+    cons: ["想定外の質問に弱い", "シナリオ設計に労力が必要"],
+    useCases: "コンプラ重視業種、アポ取り特化、定型問い合わせ応答",
+    icon: Bot,
+    iconColor: "text-blue-400",
+    iconBg: "bg-blue-400/10",
+    accentColor: "border-blue-400/25 hover:border-blue-400/40",
+    accentBg: "bg-blue-500/3",
+  },
+];
+
 const DIRECTION_OPTIONS: Array<{
   value: CallDirection;
   label: string;
@@ -109,6 +160,7 @@ export default function TemplatesWizardPage() {
   const [step, setStep] = useState<Step>("industry");
   const [industry, setIndustry] = useState<Industry | null>(null);
   const [direction, setDirection] = useState<CallDirection | null>(null);
+  const [engine, setEngine] = useState<Engine | null>(null);
 
   const template = useMemo(() => {
     if (!industry || !direction) return null;
@@ -119,6 +171,7 @@ export default function TemplatesWizardPage() {
     setStep("industry");
     setIndustry(null);
     setDirection(null);
+    setEngine(null);
   }
 
   return (
@@ -135,7 +188,9 @@ export default function TemplatesWizardPage() {
           <div className="h-px flex-1 bg-white/8" />
           <StepPill label="2. 方向" active={step === "direction"} done={!!direction} />
           <div className="h-px flex-1 bg-white/8" />
-          <StepPill label="3. 確認" active={step === "review"} done={step === "review"} />
+          <StepPill label="3. エンジン" active={step === "engine"} done={!!engine} />
+          <div className="h-px flex-1 bg-white/8" />
+          <StepPill label="4. 確認" active={step === "review"} done={step === "review"} />
         </div>
 
         <AnimatePresence mode="wait">
@@ -233,7 +288,7 @@ export default function TemplatesWizardPage() {
                       onClick={() => {
                         if (!hasTemplate) return;
                         setDirection(opt.value);
-                        setStep("review");
+                        setStep("engine");
                       }}
                       disabled={!hasTemplate}
                       className={`group text-left rounded-xl border p-5 transition-all ${
@@ -268,7 +323,108 @@ export default function TemplatesWizardPage() {
             </motion.div>
           )}
 
-          {step === "review" && template && (
+          {step === "engine" && industry && direction && (
+            <motion.div
+              key="step-engine"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-4"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-[15px] font-bold">AIエンジンを選んでください</h2>
+                  <p className="text-[12px] text-muted-foreground/50 mt-1">
+                    同じテンプレートでも、エンジンによって応答の性質が変わります
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setStep("direction");
+                    setDirection(null);
+                  }}
+                  className="text-[11px] text-muted-foreground/50 hover:text-foreground gap-1 h-7"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  方向を選び直す
+                </Button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {ENGINE_OPTIONS.map((eng) => (
+                  <button
+                    key={eng.value}
+                    onClick={() => {
+                      setEngine(eng.value);
+                      setStep("review");
+                    }}
+                    className={`group text-left rounded-xl border bg-card/40 hover:bg-card/60 transition-all p-5 relative overflow-hidden ${eng.accentColor}`}
+                  >
+                    <div
+                      className={`absolute top-0 right-0 w-32 h-32 rounded-bl-full ${eng.accentBg} opacity-60`}
+                    />
+                    <div className="relative space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-lg flex items-center justify-center ${eng.iconBg}`}
+                        >
+                          <eng.icon className={`w-5 h-5 ${eng.iconColor}`} />
+                        </div>
+                        <div>
+                          <h3 className="text-[14px] font-bold">{eng.label}</h3>
+                          <p className="text-[11px] text-muted-foreground/45">{eng.subtitle}</p>
+                        </div>
+                      </div>
+
+                      <p className="text-[12px] text-muted-foreground/55 leading-relaxed">
+                        {eng.description}
+                      </p>
+
+                      <div className="space-y-1">
+                        {eng.pros.map((p) => (
+                          <div
+                            key={p}
+                            className="flex items-center gap-2 text-[11px] text-emerald-400/75"
+                          >
+                            <Check className="w-3 h-3 shrink-0" />
+                            <span>{p}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="space-y-1">
+                        {eng.cons.map((c) => (
+                          <div
+                            key={c}
+                            className="flex items-center gap-2 text-[11px] text-amber-400/65"
+                          >
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            <span>{c}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="pt-2 border-t border-white/5">
+                        <p className="text-[10px] text-muted-foreground/40 tracking-wide uppercase font-medium mb-1">
+                          想定用途
+                        </p>
+                        <p className="text-[12px] text-muted-foreground/60">{eng.useCases}</p>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-[12px] text-primary/55 group-hover:text-primary font-semibold transition-colors pt-1">
+                        このエンジンで進める <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {step === "review" && template && engine && (
             <motion.div
               key="step-review"
               initial={{ opacity: 0, y: 12 }}
@@ -312,6 +468,40 @@ export default function TemplatesWizardPage() {
                   {template.description}
                 </p>
               </div>
+
+              {/* 選択済みエンジン */}
+              {(() => {
+                const selectedEngine = ENGINE_OPTIONS.find((e) => e.value === engine);
+                if (!selectedEngine) return null;
+                return (
+                  <div
+                    className={`rounded-xl border bg-card/30 p-4 flex items-center gap-3 ${selectedEngine.accentColor}`}
+                  >
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${selectedEngine.iconBg}`}
+                    >
+                      <selectedEngine.icon className={`w-4 h-4 ${selectedEngine.iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-muted-foreground/40 tracking-wide uppercase font-medium">
+                        選択中のAIエンジン
+                      </p>
+                      <p className="text-[13px] font-bold">{selectedEngine.label}</p>
+                      <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+                        {selectedEngine.subtitle}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setStep("engine")}
+                      className="text-[11px] text-muted-foreground/50 hover:text-foreground gap-1 h-7 shrink-0"
+                    >
+                      変更
+                    </Button>
+                  </div>
+                );
+              })()}
 
               {/* 業界ブリーフ */}
               <div className="rounded-xl border border-white/6 bg-card/30 p-5 space-y-2">
@@ -372,7 +562,7 @@ export default function TemplatesWizardPage() {
 
               {/* CTA */}
               <div className="flex items-center gap-3 pt-2">
-                <Link href={`/projects/new/chat?template=${template.id}`}>
+                <Link href={`/projects/new/chat?template=${template.id}&engine=${engine}`}>
                   <Button className="gradient-bg border-0 hover:opacity-85 h-11 px-6 text-[13px] font-semibold gap-2">
                     <MessageSquare className="w-4 h-4" />
                     Chappie と壁打ちを始める <ArrowRight className="w-3.5 h-3.5" />
