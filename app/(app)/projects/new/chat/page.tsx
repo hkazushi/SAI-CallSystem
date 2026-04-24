@@ -13,6 +13,17 @@ import type { ChappieOutput } from "@/lib/vapi-compiler/types";
 import { FileUploadZone, type AttachedFile } from "@/components/chappie/FileUploadZone";
 import { VapiCallWidget } from "@/components/vapi-call-widget";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Send,
   Bot,
   User,
@@ -198,6 +209,7 @@ function ChappieChatInner() {
   }
 
   const [input, setInput] = useState("");
+  const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
   const [deployState, setDeployState] = useState<
     | { kind: "idle" }
     | { kind: "extracting" }
@@ -255,7 +267,16 @@ function ChappieChatInner() {
     }
   }
 
-  async function handleDeployToVapi() {
+  function handleDeployClick() {
+    if (isDeploying || deployState.kind === "success") return;
+    if (!reachedReview) {
+      setShowIncompleteWarning(true);
+      return;
+    }
+    void runDeployToVapi();
+  }
+
+  async function runDeployToVapi() {
     if (isDeploying || deployState.kind === "success") return;
 
     setDeployState({ kind: "extracting" });
@@ -414,93 +435,124 @@ function ChappieChatInner() {
             </div>
           </div>
 
-          {reachedReview ? (
-            <div className="p-4 border-t border-white/5 space-y-2">
-              {deployState.kind === "success" ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-emerald-400 text-[12px] font-semibold">
-                    <Check className="w-3 h-3" />
-                    Vapi Assistant 作成完了
-                  </div>
-                  <div className="rounded-md bg-white/5 p-2 space-y-1">
-                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">
-                      name
-                    </p>
-                    <p className="text-[11px] font-medium break-all">{deployState.name}</p>
-                    <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">
-                      assistantId
-                    </p>
-                    <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
-                      {deployState.assistantId}
-                    </p>
-                  </div>
-                  <VapiCallWidget
-                    assistantId={deployState.assistantId}
-                    assistantName={deployState.name}
-                    triggerLabel="テスト通話する"
-                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold justify-center"
-                  />
-                  <a
-                    href={`https://dashboard.vapi.ai/assistants/${deployState.assistantId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block"
-                  >
-                    <Button
-                      className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground"
-                      variant="ghost"
-                    >
-                      管理画面で開く（管理者用） <ExternalLink className="w-3 h-3" />
-                    </Button>
-                  </a>
+          <div className="p-4 border-t border-white/5 space-y-2">
+            {deployState.kind === "success" ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-emerald-400 text-[12px] font-semibold">
+                  <Check className="w-3 h-3" />
+                  Vapi Assistant 作成完了
                 </div>
-              ) : (
-                <>
+                <div className="rounded-md bg-white/5 p-2 space-y-1">
+                  <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">
+                    name
+                  </p>
+                  <p className="text-[11px] font-medium break-all">{deployState.name}</p>
+                  <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">
+                    assistantId
+                  </p>
+                  <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
+                    {deployState.assistantId}
+                  </p>
+                </div>
+                <VapiCallWidget
+                  assistantId={deployState.assistantId}
+                  assistantName={deployState.name}
+                  triggerLabel="テスト通話する"
+                  className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold justify-center"
+                />
+                <a
+                  href={`https://dashboard.vapi.ai/assistants/${deployState.assistantId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block"
+                >
                   <Button
-                    onClick={handleDeployToVapi}
-                    disabled={isDeploying}
-                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                    className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground"
+                    variant="ghost"
                   >
-                    {deployState.kind === "extracting" ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        情報を抽出中…
-                      </>
-                    ) : deployState.kind === "deploying" ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Vapiへ送信中…
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3 h-3" />
-                        Vapi Assistant を作成
-                      </>
-                    )}
+                    管理画面で開く（管理者用） <ExternalLink className="w-3 h-3" />
                   </Button>
-                  {deployState.kind === "error" && (
-                    <div className="flex items-start gap-1.5 text-[11px] text-red-400 bg-red-500/5 border border-red-500/15 rounded-md p-2">
-                      <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
-                      <p className="break-words">{deployState.error}</p>
-                    </div>
+                </a>
+              </div>
+            ) : (
+              <>
+                <Button
+                  onClick={handleDeployClick}
+                  disabled={isDeploying}
+                  className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                >
+                  {deployState.kind === "extracting" ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      情報を抽出中…
+                    </>
+                  ) : deployState.kind === "deploying" ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Vapiへ送信中…
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3" />
+                      Vapi Assistant を作成
+                    </>
                   )}
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="p-4 border-t border-white/5">
-              <Button
-                variant="outline"
-                onClick={handleResetConversation}
-                className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground"
-              >
-                <Trash2 className="w-3 h-3" /> 会話をリセット
-              </Button>
-              <p className="text-[10px] text-muted-foreground/40 mt-2 leading-relaxed">
-                ブラウザを閉じたり更新しても会話は自動保存されます
-              </p>
-            </div>
-          )}
+                </Button>
+                {!reachedReview && deployState.kind !== "extracting" && deployState.kind !== "deploying" && (
+                  <p className="text-[10px] text-amber-300/70 leading-relaxed">
+                    ※ まだヒアリング途中です。途中でも作成できますが、内容が不完全になります。
+                  </p>
+                )}
+                {deployState.kind === "error" && (
+                  <div className="flex items-start gap-1.5 text-[11px] text-red-400 bg-red-500/5 border border-red-500/15 rounded-md p-2">
+                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <p className="break-words">{deployState.error}</p>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleResetConversation}
+                  className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground mt-2"
+                >
+                  <Trash2 className="w-3 h-3" /> 会話をリセット
+                </Button>
+                <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                  ブラウザを閉じたり更新しても会話は自動保存されます
+                </p>
+              </>
+            )}
+          </div>
+
+          <AlertDialog open={showIncompleteWarning} onOpenChange={setShowIncompleteWarning}>
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogMedia className="bg-amber-500/15 text-amber-400">
+                  <AlertCircle className="w-5 h-5" />
+                </AlertDialogMedia>
+                <AlertDialogTitle>まだヒアリング途中ですが、作成しますか？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  現在のステージは「{currentStage}」で、収集進捗は {progress}% です。
+                  このまま作成するとテンプレートのデフォルト値で埋められ、
+                  不完全な AI エージェントになる可能性があります。
+                  <br />
+                  <br />
+                  続けるにはそのまま、やっぱり壁打ちを続けるならキャンセルしてください。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>壁打ちを続ける</AlertDialogCancel>
+                <AlertDialogAction
+                  className="gradient-bg border-0 hover:opacity-85"
+                  onClick={() => {
+                    setShowIncompleteWarning(false);
+                    void runDeployToVapi();
+                  }}
+                >
+                  このまま作成する
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         {/* Chat area */}
