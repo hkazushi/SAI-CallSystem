@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { motion } from "framer-motion";
 
 const mainNav = [
@@ -57,14 +58,14 @@ function NavItem({
       className={cn(
         "relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 group",
         active
-          ? "text-white font-semibold"
-          : "text-white/38 hover:text-white/70 font-normal"
+          ? "text-foreground font-semibold"
+          : "text-muted-foreground/70 hover:text-foreground font-normal"
       )}
     >
       {active && (
         <motion.div
           layoutId="nav-bg"
-          className="absolute inset-0 rounded-lg bg-white/8"
+          className="absolute inset-0 rounded-lg bg-sidebar-accent"
           initial={false}
           transition={{ type: "spring", stiffness: 400, damping: 32 }}
         />
@@ -81,7 +82,7 @@ function NavItem({
       <Icon
         className={cn(
           "w-[15px] h-[15px] shrink-0 relative z-10 transition-colors",
-          active ? "text-primary" : "text-white/28 group-hover:text-white/55"
+          active ? "text-primary" : "text-muted-foreground/60 group-hover:text-foreground/80"
         )}
       />
       <span className="relative z-10 truncate">{label}</span>
@@ -95,7 +96,7 @@ export function Sidebar() {
   return (
     <aside className="w-56 h-screen flex flex-col shrink-0 relative">
       {/* Left edge gradient */}
-      <div className="absolute inset-0 bg-[oklch(0.095_0_0)] border-r border-white/[0.05]" />
+      <div className="absolute inset-0 bg-sidebar border-r border-sidebar-border" />
       <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-primary/25 to-transparent" />
 
       {/* Logo */}
@@ -110,8 +111,8 @@ export function Sidebar() {
             <Phone className="w-4 h-4 text-white" />
           </motion.div>
           <div className="leading-tight">
-            <p className="text-[13px] font-bold text-white/90 tracking-tight">VoiceAI</p>
-            <p className="text-[10px] text-white/28 tracking-wide font-medium">Pro</p>
+            <p className="text-[13px] font-bold text-foreground tracking-tight">VoiceAI</p>
+            <p className="text-[10px] text-muted-foreground/60 tracking-wide font-medium">Pro</p>
           </div>
         </Link>
       </div>
@@ -132,7 +133,7 @@ export function Sidebar() {
         </div>
 
         {/* Divider */}
-        <div className="mx-3 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+        <div className="mx-3 h-px bg-gradient-to-r from-transparent via-sidebar-border to-transparent" />
 
         {/* Settings nav */}
         <div className="space-y-0.5">
@@ -148,18 +149,20 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* User */}
-      <div className="relative px-2.5 py-3 border-t border-white/[0.05]">
+      {/* User + theme toggle */}
+      <div className="relative px-2.5 py-3 border-t border-sidebar-border flex items-center gap-1">
         <DropdownMenu>
-          <DropdownMenuTrigger className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors text-left">
+          <DropdownMenuTrigger className="flex-1 flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-sidebar-accent cursor-pointer transition-colors text-left min-w-0">
             <Avatar className="w-7 h-7 shrink-0">
               <AvatarFallback className="bg-primary/15 text-primary text-[11px] font-bold">
                 田
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-white/75 truncate leading-tight">田中 太郎</p>
-              <p className="text-[10px] text-white/28 truncate">tanaka@example.com</p>
+              <p className="text-[12px] font-medium text-foreground truncate leading-tight">
+                田中 太郎
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 truncate">tanaka@example.com</p>
             </div>
             <div className="flex items-center gap-0.5 text-warm shrink-0">
               <Zap className="w-2.5 h-2.5" />
@@ -176,6 +179,7 @@ export function Sidebar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ThemeToggle compact className="shrink-0" />
       </div>
     </aside>
   );
