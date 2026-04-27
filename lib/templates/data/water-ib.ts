@@ -112,4 +112,60 @@ export const waterIb: Template = {
 
   industryKnowledgeBrief:
     'ウォーターサーバーインバウンドの最大テーマは解約阻止（チャーン防止）。解約理由トップは「使用頻度減少」「料金」「引越し」の 3 つで、それぞれに対する代替提案（ボトル本数削減・プラン変更・移設）のスクリプトが重要。故障対応は速度がカギで、交換機手配の最短日数を即答できるかが満足度を決める。一時休止プランの存在を知らない顧客が多く、解約申し出の 2〜3 割を休止に転換できる。最低利用期間内の解約には違約金（機器残存リース料相当）が発生するため、正確な算出と説明が必須。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Water Server Inbound Support Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.inquiry.cancellation',
+        trainingPhrases: [
+          '解約したい',
+          'やめたい',
+          '使わなくなった',
+          '引越しでやめる',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '解約のお申し出ですね。一時休止プランやボトル本数の変更など代替案もございますが、ご事情をお聞かせいただけますか？',
+      },
+      {
+        displayName: 'intent.inquiry.malfunction',
+        trainingPhrases: [
+          '壊れた',
+          '水が出ない',
+          '冷えない',
+          '故障している',
+          'お湯が出ない',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '故障のご連絡ですね。状況をお伺いしまして、最短での交換機手配を進めさせていただきます。',
+      },
+      {
+        displayName: 'intent.inquiry.delivery_change',
+        trainingPhrases: [
+          '配送日を変更したい',
+          'ボトルを止めたい',
+          '配送スキップしたい',
+          '配送頻度を変えたい',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '配送調整のお手続きを承ります。次回のご希望配送日をお聞かせください。',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.support',
+      trainingPhrases: [
+        '担当者と話したい',
+        '解約手続きをしたい',
+        '人間に代わってください',
+        '責任者を出して',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '担当者におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お聞かせください。',
+      '2': 'すみません、お電話が遠いようです。ゆっくりお話しいただけますか？',
+      '3': '担当者から折り返しご連絡させていただきます。',
+    },
+  },
 };

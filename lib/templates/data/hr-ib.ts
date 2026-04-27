@@ -112,4 +112,59 @@ export const hrIb: Template = {
 
   industryKnowledgeBrief:
     '転職エージェントのインバウンドは「求人広告・ポータル経由の問い合わせ」と「登録後の面談予約」が主体。問い合わせから 30 分以内の対応が CVR を大きく左右する（業界データで 80% 以上が当日中の返答を重視）。求職者の最大の不安は「自分に合う求人があるか」と「エージェントに急かされないか」の 2 点。非公開求人の存在が来談動機になるため早期に言及する。退職済み求職者は緊急度が高いため優先対応が必要。初回面談では「希望整理」「市場価値確認」「求人提案」の 3 つを設計する。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'HR Agent Inbound Inquiry Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.inquiry.job_search',
+        trainingPhrases: [
+          '転職を考えている',
+          '求人を探したい',
+          '仕事を探している',
+          '転職の相談',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: 'ご相談ありがとうございます。ご希望の業界や職種をお聞かせいただければ、最適な求人をご紹介いたします。',
+      },
+      {
+        displayName: 'intent.inquiry.specific_job_posting',
+        trainingPhrases: [
+          'この求人について',
+          '掲載中の求人を見ている',
+          '広告で見た求人',
+          '応募したい求人がある',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: 'お問い合わせいただいた求人の詳細をご案内いたします。求人番号や企業名をお聞かせいただけますか？',
+      },
+      {
+        displayName: 'intent.inquiry.urgent_search',
+        trainingPhrases: [
+          '退職したばかり',
+          'すぐに働きたい',
+          '至急仕事を探している',
+          '次が決まらず困っている',
+        ],
+        targetPage: 'escalation',
+        fulfillmentMessage: 'ご状況承知しました。優先的にご面談をお取りできるよう、すぐに担当コンサルタントにおつなぎします。',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.consultant',
+      trainingPhrases: [
+        'コンサルタントに代わって',
+        '担当者と話したい',
+        '面談を予約したい',
+        '専任の人をお願いします',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: 'キャリアコンサルタントにおつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お願いできますでしょうか？',
+      '2': 'お電話が遠いようです。ゆっくりお話しいただけますか？',
+      '3': '担当コンサルタントから折り返しご連絡させていただきます。',
+    },
+  },
 };

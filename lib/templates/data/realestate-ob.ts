@@ -115,4 +115,58 @@ export const realestateOb: Template = {
 
   industryKnowledgeBrief:
     '不動産アウトバウンドは「反響追客」が主流で、ポータルサイト（SUUMO・HOME\'S・アットホーム）からの問い合わせ後に 1 時間以内に連絡するのが成約率向上のカギ（業界データでは 1 時間超えると CVR が 40% 低下）。最大の関門は「来店させること」で、来店さえすれば成約率は 20〜30% に達する。検討温度の把握（購入時期・予算・目的）が追客優先度を決める。投資用物件は利回り・入居率・管理費の説明が必要。住み替え案件は売却と購入の同時進行調整が複雑。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Real Estate Outbound Followup Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.objection.just_browsing',
+        trainingPhrases: [
+          'まだ情報収集の段階',
+          'すぐ買うつもりはない',
+          '見てるだけ',
+          'まだ先の話',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'もちろんゆっくりご検討ください。条件をお伺いして新着情報だけ定期的にお送りすることも可能ですがいかがでしょうか？',
+      },
+      {
+        displayName: 'intent.objection.budget_concern',
+        trainingPhrases: [
+          '予算が合わない',
+          '高すぎる',
+          '住宅ローンが心配',
+          '頭金が足りない',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '住宅ローン無料相談も同時にご案内できます。月々のご返済額から逆算してご予算を見直すご提案も可能です。',
+      },
+      {
+        displayName: 'intent.objection.already_viewing',
+        trainingPhrases: [
+          '他社で見ている',
+          '別の不動産会社と話している',
+          '既に内覧を予約した',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'なるほど、ご検討進んでらっしゃるのですね。当社では非公開物件もご紹介できますのでセカンドオピニオンとして活用いただけます。',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.agent',
+      trainingPhrases: [
+        '担当営業に代わって',
+        '内覧予約をしたい',
+        '物件を見たい',
+        '専門の人と話したい',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '物件担当におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お聞かせいただけますか？',
+      '2': 'お電話が遠いようでして、ゆっくりお話しいただけますでしょうか？',
+      '3': '担当者から折り返しご連絡させていただきます。',
+    },
+  },
 };

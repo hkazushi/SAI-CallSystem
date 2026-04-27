@@ -116,4 +116,58 @@ export const hrOb: Template = {
 
   industryKnowledgeBrief:
     '転職エージェントのアウトバウンドは「登録者への面談打診」が中心。登録後 48 時間以内の初回連絡が CVR に大きく影響する。求職者の最大懸念は「エージェントに利用されること」と「転職に踏み切る決断をさせられること」。そのため「情報収集だけ」「急がなくていい」の姿勢が重要。在職中の求職者が 7 割以上のため、夜間・休日面談の対応可否が重要。年収交渉・内定後フォローまで担うエージェントの付加価値を早期に説明する。求人の非公開案件の保有をアピールすることが差別化に有効。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'HR Agent Outbound Followup Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.objection.not_actively_searching',
+        trainingPhrases: [
+          'まだ転職する気はない',
+          'すぐに動かない',
+          '今の会社に不満はない',
+          'まだ情報収集だけ',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'もちろんです、情報収集だけでも全く問題ございません。市場動向のご共有や非公開求人のご紹介だけのご面談も可能です。',
+      },
+      {
+        displayName: 'intent.objection.busy_at_work',
+        trainingPhrases: [
+          '今仕事中',
+          '電話できる時間がない',
+          '忙しくて話せない',
+          '在職中で動きにくい',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '失礼しました。夜間や休日もオンラインで面談可能ですので、ご都合の良い時間帯をお聞かせいただけますか？',
+      },
+      {
+        displayName: 'intent.objection.distrust_agent',
+        trainingPhrases: [
+          'エージェントは信用できない',
+          '無理に転職を勧められそう',
+          '前のエージェントに嫌な思いをした',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '無理にお勧めすることはございません。市場価値の客観的な分析だけでもお持ち帰りいただけます。',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.consultant',
+      trainingPhrases: [
+        'コンサルタントに代わって',
+        '担当者と話したい',
+        '面談を予約したい',
+        '詳しく聞きたい',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: 'キャリアコンサルタントにおつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お聞かせください。',
+      '2': 'お電話が遠いようです。ゆっくりお話しいただけますか？',
+      '3': '担当コンサルタントから折り返しご連絡させていただきます。',
+    },
+  },
 };

@@ -114,4 +114,72 @@ export const hikariOb: Template = {
 
   industryKnowledgeBrief:
     '光回線アウトバウンドは、光コラボレーション（光コラボ）事業者からの乗り換え営業が主流。主要訴求ポイントは「キャッシュバック」「月額値下げ」「スマホセット割」の 3 つ。競合認識はNTT（フレッツ光）・ソフトバンク光・auひかり・ドコモ光が多い。現在の月額料金を聞いて差額訴求するのが王道。法人向け小規模店舗は法人プランの存在を知らないケースが多く狙い目。成約率は業界平均 1〜3% で、電話完結より「資料送付＋後日訪問」の 2 ステップが定番。住居形態（戸建て/集合住宅）で工事方法が変わり、マンションは管理組合との契約状況を必ず確認する。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Hikari Outbound Sales Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.objection.satisfied_with_current',
+        trainingPhrases: [
+          '今の回線で満足してる',
+          '今のままでいい',
+          '変えるつもりはない',
+          '今のキャリアで満足しています',
+          '不満はありません',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '差額を比較してみませんか？現在の月額料金を教えていただければ、具体的にいくら安くなるかその場でお出しします。',
+      },
+      {
+        displayName: 'intent.objection.installation_hassle',
+        trainingPhrases: [
+          '工事が面倒',
+          '工事は嫌',
+          '工事はしたくない',
+          '工事が大変そう',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '工事は基本的に半日以内で終わります。工事不要のホームルーター型プランもございますのでご安心ください。',
+      },
+      {
+        displayName: 'intent.objection.contract_lock',
+        trainingPhrases: [
+          '縛りが嫌',
+          '契約期間が長い',
+          '違約金が心配',
+          '解約金がかかる',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '最近は縛りなし・違約金なしのプランも増えています。今のご契約満了時期に合わせれば違約金なく移れるケースが多いです。',
+      },
+      {
+        displayName: 'intent.objection.consult_family',
+        trainingPhrases: [
+          '家族に相談する',
+          '夫に相談する',
+          '妻に相談する',
+          '一人で決められない',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'もちろんです。ご家族でご検討いただく際の資料をメールかLINEでお送りしてもよろしいでしょうか？',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.hikari',
+      trainingPhrases: [
+        '担当者に代わって',
+        '人間と話したい',
+        '契約したい',
+        '工事のことを詳しく知りたい',
+        'オペレーターをお願いします',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '担当者におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、お電話が遠いようです。もう一度お願いできますか？',
+      '2': 'すみません、もう一度ゆっくりお話しいただけますでしょうか？',
+      '3': '何度も申し訳ございません。担当者からあらためてお電話させていただきます。',
+    },
+  },
 };

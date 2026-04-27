@@ -113,4 +113,61 @@ export const hikariIb: Template = {
 
   industryKnowledgeBrief:
     '光回線インバウンドは、接続不良・速度低下・料金請求・申込・解約が 5 大問い合わせカテゴリ。接続トラブルの 7 割はルーター再起動・LANケーブル抜き差しで解消する。料金増加の主因はキャンペーン期間終了とオプション自動追加。解約引き留めはプラン変更提案が有効で、成功率は 15〜25%。高齢者顧客への専門用語使用は満足度を下げるため禁止。インバウンドは顧客がすでに困っている状態でかけてくるため、共感ファーストの対応が解約防止に直結する。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Hikari Inbound Support Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.inquiry.connection_trouble',
+        trainingPhrases: [
+          'ネットがつながらない',
+          '接続できない',
+          'インターネットが使えない',
+          'WiFiが切れる',
+          '速度が遅い',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: 'ご不便をおかけし申し訳ございません。まずルーターの再起動を一緒に確認させていただけますか？',
+      },
+      {
+        displayName: 'intent.inquiry.billing',
+        trainingPhrases: [
+          '料金のことで',
+          '請求がおかしい',
+          '料金が高い',
+          '今月の料金を知りたい',
+          'キャンペーンが終わった',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: 'ご請求内容について確認いたします。お手元のご請求書か契約者IDをお聞かせいただけますか？',
+      },
+      {
+        displayName: 'intent.inquiry.cancellation',
+        trainingPhrases: [
+          '解約したい',
+          'やめたい',
+          '契約を終了したい',
+          'もう使わない',
+        ],
+        targetPage: 'escalation',
+        fulfillmentMessage: '解約のお手続きですね。ご事情をお伺いし、お得なプランがあればご提案させていただいてもよろしいでしょうか？',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.support',
+      trainingPhrases: [
+        '担当者と話したい',
+        '人間に代わって',
+        '専門の人をお願いします',
+        '訪問修理を頼みたい',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '担当者におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お聞かせいただけますか？',
+      '2': 'すみません、お電話が遠いようです。ゆっくりお話しいただけますでしょうか？',
+      '3': 'お話が確認できないため、担当者から折り返しご連絡させていただきます。',
+    },
+  },
 };

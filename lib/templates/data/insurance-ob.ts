@@ -112,4 +112,59 @@ export const insuranceOb: Template = {
 
   industryKnowledgeBrief:
     '保険アウトバウンドは「FP面談アポ取り」が目的で、電話で商品販売はしない。法規上、保険募集には資格が必要なため、AIはアポ設定に徹する。顧客の最大懸念は「騙されること」と「今より高くなること」。複数社比較・無料診断・国家資格FPという要素が信頼醸成のキーワード。ターゲットは結婚・出産・住宅購入・転職などライフイベントの前後が CVR 最高。特に 30〜40 代は教育費と老後資金の二重負担を意識させると刺さる。解約返戻金・税控除などの言及は慎重に（保証できない内容は話さない）。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Insurance Outbound FP Appointment Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.objection.already_insured',
+        trainingPhrases: [
+          'もう保険に入っている',
+          '今の保険で十分',
+          '保険は間に合っています',
+          '見直しは必要ない',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'ご加入されているのですね。実は同じ保障内容でもより安くなるケースが多くございます。複数社比較は無料ですので一度ご検討いかがでしょうか？',
+      },
+      {
+        displayName: 'intent.objection.distrust_insurance',
+        trainingPhrases: [
+          '保険は信用できない',
+          '保険屋は怪しい',
+          '騙される気がする',
+          'しつこく勧誘されたくない',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'ご懸念ごもっともです。今回ご案内するのは国家資格を持つFPによる無料の中立診断のみで、商品販売は行いません。',
+      },
+      {
+        displayName: 'intent.objection.too_expensive',
+        trainingPhrases: [
+          '保険料が高い',
+          '余裕がない',
+          'お金がかかるのは嫌',
+          '保険にお金を回せない',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: 'むしろ複数社比較で月々の保険料を下げるのが目的の診断です。今お支払いの保険料をお伺いして比較してみませんか？',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.fp',
+      trainingPhrases: [
+        'FPに代わって',
+        '担当者と話したい',
+        '専門家に聞きたい',
+        '面談を予約したい',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: 'ファイナンシャルプランナーにおつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お願いできますでしょうか？',
+      '2': 'お電話が遠いようです。ゆっくりお話しいただけますか？',
+      '3': '改めて担当のFPからご連絡させていただきます。',
+    },
+  },
 };

@@ -115,4 +115,60 @@ export const insuranceIb: Template = {
 
   industryKnowledgeBrief:
     '保険インバウンドは「事故受付」と「相談受付」の 2 系統が核。事故受付は初動スピードが顧客満足を左右し、受付番号発行・担当者手配の確認までが最優先。保険金支払い可否の断定は電話口でしてはならない（支払い部門が判断）。示談代行サービスの有無は証券で確認が必要。医療保険の請求は診断書が必要なケースが多く、書類案内が重要な業務。解約申し出は保険料見直しで対応できる場合が多く、引き留め成功率は 20〜30%。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Insurance Inbound Reception Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.inquiry.accident_report',
+        trainingPhrases: [
+          '事故にあった',
+          '事故の連絡です',
+          '車をぶつけた',
+          'もらい事故にあった',
+          '入院した',
+        ],
+        targetPage: 'escalation',
+        fulfillmentMessage: '事故のご連絡ですね。お怪我は大丈夫でしょうか？すぐに専門担当におつなぎいたしますので少々お待ちください。',
+      },
+      {
+        displayName: 'intent.inquiry.claim_request',
+        trainingPhrases: [
+          '保険金を請求したい',
+          '給付金の請求',
+          '入院給付金',
+          '請求書類が欲しい',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '保険金請求のお手続きですね。ご契約者様情報を確認させていただきます。',
+      },
+      {
+        displayName: 'intent.inquiry.cancellation',
+        trainingPhrases: [
+          '解約したい',
+          '保険をやめたい',
+          '更新しない',
+          '保険料が高い',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '解約のご相談ですね。ご事情によっては保険料を抑えるプラン変更もご案内できます。お話をお伺いしてもよろしいですか？',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.specialist',
+      trainingPhrases: [
+        '担当者に代わって',
+        '専門の人と話したい',
+        '事故担当をお願いします',
+        '保険金担当へ',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '専門担当におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お願いできますでしょうか？',
+      '2': 'すみません、お電話が遠いようです。ゆっくりお話しいただけますか？',
+      '3': '担当者から折り返しご連絡させていただきます。',
+    },
+  },
 };

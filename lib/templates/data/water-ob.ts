@@ -114,4 +114,59 @@ export const waterOb: Template = {
 
   industryKnowledgeBrief:
     'ウォーターサーバー新規獲得アウトバウンドは「無料お試し」のファーストステップクロージングが定番。主要競合はプレミアムウォーター・アクアクララ・クリクラなど。ターゲットは乳幼児・妊婦のいる家庭が最高CVR。ペットボトル購入者は月換算でサーバーより高くなるケースが多く、数字比較で刺さりやすい。法人・オフィス向けは台数が多く単価が高い。解約率は 1 年目に集中するため、最低利用期間の説明は正確に行う必要がある。設置場所の確認（賃貸の電気容量・床面積）も商談フローに入れるべき。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Water Server Outbound Sales Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.objection.no_space',
+        trainingPhrases: [
+          '置く場所がない',
+          'スペースがない',
+          '部屋が狭い',
+          '置けないと思う',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '卓上タイプは A4 サイズほどのスペースで置けますし、設置場所のご相談も無料で承っております。',
+      },
+      {
+        displayName: 'intent.objection.cost_concern',
+        trainingPhrases: [
+          '高そう',
+          '料金が心配',
+          'ペットボトルで十分',
+          '水代がかかる',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '月換算ですとペットボトルご購入よりお安くなるケースが多いです。今お使いのペットボトル代をお伺いしてもよろしいですか？',
+      },
+      {
+        displayName: 'intent.objection.contract_period',
+        trainingPhrases: [
+          '長期契約は嫌',
+          '解約金が心配',
+          '縛りが嫌い',
+          'すぐやめたい場合は',
+        ],
+        targetPage: 'objection_handling',
+        fulfillmentMessage: '最低利用期間は通常 1〜2 年ですが、まずは無料お試しから始められます。お試し期間にご判断いただけますのでご安心ください。',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.water',
+      trainingPhrases: [
+        '担当者に代わって',
+        '詳しい人と話したい',
+        '契約したい',
+        '正式に申し込みたい',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '担当者におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お願いできますでしょうか？',
+      '2': 'すみません、お声が聞き取りづらいようでして、ゆっくりお願いします。',
+      '3': '何度も申し訳ございません。改めて担当よりご連絡させていただきます。',
+    },
+  },
 };

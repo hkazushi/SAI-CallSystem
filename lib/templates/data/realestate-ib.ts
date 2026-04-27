@@ -112,4 +112,59 @@ export const realestateIb: Template = {
 
   industryKnowledgeBrief:
     '不動産インバウンドは「来店させること」が成約への最短経路。電話問い合わせの段階では条件が漠然としていることが多く、ヒアリングで具体化しながら「専任担当が最適な物件を選んでご提案する」という付加価値を説明して来店動機を作る。物件の空き状況確認は即時が基本（ポータルと実在庫のタイムラグがある）。住宅ローン相談を同時に提供できると来店率が向上する。投資目的の顧客は利回り・返済計算の専門性を求めるため、専用担当への橋渡しが必要。',
+
+  dfcxBaseline: {
+    defaultFlowName: 'Real Estate Inbound Inquiry Flow',
+    extraIntents: [
+      {
+        displayName: 'intent.inquiry.property_availability',
+        trainingPhrases: [
+          'この物件はまだありますか',
+          '空いてますか',
+          '掲載中の物件について',
+          'まだ募集していますか',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '物件の空き状況を確認いたします。お問い合わせいただいた物件名か掲載番号をお聞かせください。',
+      },
+      {
+        displayName: 'intent.inquiry.viewing_request',
+        trainingPhrases: [
+          '内覧したい',
+          '物件を見たい',
+          '内見の予約',
+          '見学できますか',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '内覧のご希望ですね。物件の在庫確認後、ご都合の良い日時をご相談させていただきます。',
+      },
+      {
+        displayName: 'intent.inquiry.loan_consultation',
+        trainingPhrases: [
+          'ローンの相談',
+          '住宅ローンが組めるか',
+          '返済額を知りたい',
+          '頭金がどのくらい必要か',
+        ],
+        targetPage: 'resolution',
+        fulfillmentMessage: '住宅ローンのご相談ですね。物件選定とあわせて専門スタッフがご案内できます。ご年収や勤務形態をお伺いしてもよろしいですか？',
+      },
+    ],
+    transferIntent: {
+      displayName: 'intent.transfer.agent',
+      trainingPhrases: [
+        '担当者と話したい',
+        '営業に代わって',
+        '専門の人をお願いします',
+        '訪問予約をしたい',
+      ],
+      targetPage: 'transfer',
+      fulfillmentMessage: '物件担当におつなぎいたします。少々お待ちください。',
+    },
+    repromptOverrides: {
+      '1': '恐れ入ります、もう一度お願いできますでしょうか？',
+      '2': 'お電話が遠いようです。ゆっくりお話しいただけますか？',
+      '3': '担当者から折り返しご連絡させていただきます。',
+    },
+  },
 };
