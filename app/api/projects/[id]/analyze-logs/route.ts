@@ -15,9 +15,10 @@
  *
  * 100KB 超は 30KB チャンクに分割 → 各チャンクで抽出 → 集約。
  *
- * モデル: anthropic/claude-sonnet-4.6 via Vercel AI Gateway (state-extractor と同パターン)
+ * モデル: claude-sonnet-4-6 (state-extractor と同パターン)
  */
 import { generateText, Output } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTemplate } from "@/lib/templates";
@@ -135,7 +136,7 @@ export async function POST(req: Request) {
   for (const [i, chunk] of chunks.entries()) {
     try {
       const result = await generateText({
-        model: "anthropic/claude-sonnet-4.6",
+        model: anthropic("claude-sonnet-4-6"),
         output: Output.object({ schema: chunkAnalysisSchema }),
         system: ANALYSIS_PROMPT,
         messages: [
