@@ -72,6 +72,14 @@ export const OUTBOUND_SALES_BASELINE: DfcxAgentConfig = {
       modelType: "MODEL_TYPE_ADVANCED",
       classificationThreshold: 0.3,
     },
+    // セッション開始時に Default Welcome Intent が発火 → greeting Page へ遷移する
+    // greeting Page の entryFulfillment が firstMessage を発話する
+    transitionRoutes: [
+      {
+        intent: "Default Welcome Intent",
+        targetPage: "greeting",
+      },
+    ],
   },
 
   pages: [

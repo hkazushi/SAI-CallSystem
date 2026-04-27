@@ -99,7 +99,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
     const flowId = defaultFlow.name.split("/").pop()!;
 
-    // ---------- Step 3: Flow PATCH ----------
+    // ---------- Step 3: Flow PATCH (displayName / nluSettings のみ。transitionRoutes は Pages 作成後に PATCH) ----------
     await dfcxFetch(
       `/${defaultFlow.name}?updateMask=displayName,nluSettings`,
       {
@@ -112,8 +112,18 @@ export async function POST(req: Request, { params }: RouteContext) {
       { location },
     );
 
-    // ---------- Step 4: Intents 作成 ----------
+    // ---------- Step 4: Intents 作成 (組み込み Default Welcome Intent も先に取得して登録) ----------
     const intentNameMap = new Map<string, string>(); // displayName → resource name
+    // 4a: 組み込み Intent (Default Welcome Intent / Default Negative Intent) を取得
+    const existingIntents = await dfcxFetch<{ intents?: Array<{ name: string; displayName: string }> }>(
+      `/${createdAgentName}/intents`,
+      { method: "GET" },
+      { location },
+    );
+    for (const intent of existingIntents.intents ?? []) {
+      intentNameMap.set(intent.displayName, intent.name);
+    }
+    // 4b: 自前の Intent を作成
     for (const intent of config.intents) {
       const created = await dfcxFetch<{ name: string }>(
         `/${createdAgentName}/intents`,
@@ -177,6 +187,21 @@ export async function POST(req: Request, { params }: RouteContext) {
         {
           method: "PATCH",
           body: JSON.stringify(patchBody),
+        },
+        { location },
+      );
+    }
+
+    // ---------- Step 6.5: Flow の transitionRoutes を PATCH (Default Welcome Intent → greeting Page など) ----------
+    if (config.flow.transitionRoutes && config.flow.transitionRoutes.length > 0) {
+      const flowTransitionRoutes = config.flow.transitionRoutes.map((route) =>
+        resolveTransitionRoute(route, intentNameMap, pageNameMap, flowResource),
+      );
+      await dfcxFetch(
+        `/${defaultFlow.name}?updateMask=transitionRoutes`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ transitionRoutes: flowTransitionRoutes }),
         },
         { location },
       );

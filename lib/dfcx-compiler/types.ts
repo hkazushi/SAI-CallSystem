@@ -98,6 +98,8 @@ export interface DfcxFlow {
     modelType: "MODEL_TYPE_ADVANCED" | "MODEL_TYPE_STANDARD";
     classificationThreshold?: number;
   };
+  /** Flow レベルの遷移ルート (Default Welcome Intent などをここに置く) */
+  transitionRoutes?: DfcxTransitionRoute[];
 }
 
 /** Agent ルート設定 */

@@ -57,6 +57,13 @@ export const INBOUND_SUPPORT_BASELINE: DfcxAgentConfig = {
       modelType: "MODEL_TYPE_ADVANCED",
       classificationThreshold: 0.3,
     },
+    // セッション開始時に Default Welcome Intent が発火 → greeting Page へ遷移する
+    transitionRoutes: [
+      {
+        intent: "Default Welcome Intent",
+        targetPage: "greeting",
+      },
+    ],
   },
 
   pages: [
