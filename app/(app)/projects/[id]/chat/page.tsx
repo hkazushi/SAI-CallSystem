@@ -1,17 +1,55 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PageTransition } from "@/components/ui/page-transition";
 import { mockProjects, mockScenarioDrafts, chappieGreeting } from "@/lib/mock-data";
-import { Send, User, Check, Zap, Bot, ArrowLeft, RefreshCw, Sparkles } from "lucide-react";
+import { Send, User, Check, Zap, Bot, ArrowLeft, RefreshCw, Sparkles, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Message = { role: "assistant" | "user"; content: string };
 
+interface LogDraft {
+  templateId?: string;
+  suggestedTasks: Array<{ name: string; trigger: string; steps: string[]; intentTrainingPhrases: string[] }>;
+  suggestedHearingFields: Array<{ key: string; label: string; type: string; required: boolean }>;
+  suggestedObjections: Array<{ trigger: string; suggestedResponses: string[] }>;
+  suggestedPersona: { tone: string; doNots: string[] };
+  suggestedTransferConditions: string[];
+}
+
+function summarizeLogDraft(d: LogDraft): string {
+  const parts: string[] = [
+    "📋 既存ログから以下のドラフトを抽出しました。",
+    "",
+  ];
+  if (d.suggestedTasks.length > 0) {
+    parts.push(`**検出シナリオ (${d.suggestedTasks.length}件)**`);
+    d.suggestedTasks.slice(0, 4).forEach((t) => parts.push(`- ${t.name}: ${t.trigger}`));
+    parts.push("");
+  }
+  if (d.suggestedHearingFields.length > 0) {
+    parts.push(`**ヒアリング項目 (${d.suggestedHearingFields.length}件)**`);
+    parts.push(d.suggestedHearingFields.map((f) => f.label).join(" / "));
+    parts.push("");
+  }
+  if (d.suggestedObjections.length > 0) {
+    parts.push(`**反論候補 (${d.suggestedObjections.length}件)**`);
+    d.suggestedObjections.slice(0, 4).forEach((o) => parts.push(`- 「${o.trigger}」`));
+    parts.push("");
+  }
+  if (d.suggestedPersona.tone) {
+    parts.push(`**ペルソナ**: ${d.suggestedPersona.tone}`);
+    parts.push("");
+  }
+  parts.push("ここから「足す・引く・細分化」していきましょう。何を変更しますか？");
+  return parts.join("\n");
+}
+
 export default function ProjectChatPage() {
   const { id } = useParams();
+  const searchParams = useSearchParams();
   const project = mockProjects.find((p) => p.id === id) ?? mockProjects[0];
   const draft = mockScenarioDrafts.find((d) => d.project_id === project.id);
 
@@ -22,7 +60,26 @@ export default function ProjectChatPage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [logDraft, setLogDraft] = useState<LogDraft | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // ログ取込からのシード読み込み (?seed=logs)
+  useEffect(() => {
+    if (searchParams.get("seed") !== "logs") return;
+    const raw = sessionStorage.getItem(`chappie-draft-${id}`);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as LogDraft;
+      setLogDraft(parsed);
+      setMessages((prev) => {
+        // 既にシード済みの場合はスキップ
+        if (prev.some((m) => m.content.includes("既存ログから以下のドラフトを抽出"))) return prev;
+        return [{ role: "assistant", content: summarizeLogDraft(parsed) }, ...prev];
+      });
+    } catch (e) {
+      console.warn("[chat] failed to parse log draft", e);
+    }
+  }, [id, searchParams]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -94,6 +151,19 @@ export default function ProjectChatPage() {
           </div>
 
           <div className="p-4 border-t border-white/5 space-y-2">
+            {logDraft && (
+              <div className="rounded-md border border-blue-400/20 bg-blue-400/5 px-2 py-1.5 text-[10px] text-blue-300/90 flex items-center gap-1.5">
+                <FileText className="w-3 h-3 shrink-0" />
+                <span className="truncate">
+                  ログ取込済み ({logDraft.suggestedTasks.length} シナリオ / {logDraft.suggestedHearingFields.length} 項目)
+                </span>
+              </div>
+            )}
+            <Link href={`/projects/${project.id}/import-logs`}>
+              <Button variant="outline" className="w-full h-8 text-[11px] font-semibold gap-1">
+                <FileText className="w-3 h-3" />既存ログ取込
+              </Button>
+            </Link>
             <Link href={`/projects/${project.id}/builder`}>
               <Button className="w-full gradient-bg border-0 hover:opacity-85 h-8 text-[11px] font-semibold gap-1">
                 <RefreshCw className="w-3 h-3" />再コンパイル
