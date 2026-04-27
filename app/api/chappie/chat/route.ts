@@ -20,7 +20,9 @@ import {
   buildStageDirective,
   buildTemplateContext,
   buildAttachmentContext,
+  buildEngineDirective,
   type AttachmentContext,
+  type ChappieEngine,
 } from "@/lib/chappie/meta-prompt";
 import { detectStage } from "@/lib/chappie/stage-detector";
 import type { WallDiscussionStage } from "@/lib/chappie/types";
@@ -42,10 +44,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const { messages, templateId, attachments } = (body ?? {}) as {
+  const { messages, templateId, attachments, engine } = (body ?? {}) as {
     messages?: UIMessage[];
     templateId?: string;
     attachments?: AttachmentContext[];
+    engine?: ChappieEngine;
   };
   if (!Array.isArray(messages)) {
     return NextResponse.json({ error: "messages array is required" }, { status: 400 });
@@ -81,6 +84,9 @@ export async function POST(req: Request) {
       }));
     const block = buildAttachmentContext(safeAttachments);
     if (block) sections.push(block);
+  }
+  if (engine) {
+    sections.push(buildEngineDirective(engine));
   }
   sections.push(buildStageDirective(stage));
 

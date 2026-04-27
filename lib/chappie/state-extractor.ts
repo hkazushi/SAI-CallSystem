@@ -11,6 +11,18 @@ import type { ChappieOutput } from "../vapi-compiler/types";
 import type { Template } from "@/lib/templates/types";
 import type { AttachmentContext } from "./meta-prompt";
 
+const dfcxEntityTypeSchema = z.enum([
+  "@sys.person",
+  "@sys.phone-number",
+  "@sys.address",
+  "@sys.date-time",
+  "@sys.number",
+  "@sys.email",
+  "@sys.any",
+]);
+
+const repromptStrategySchema = z.enum(["gentle", "assertive", "offer_transfer"]);
+
 const hearingFieldSchema = z.object({
   key: z.string().describe("snake_case のプロパティ名"),
   label: z.string().describe("人向け表示名"),
@@ -18,12 +30,26 @@ const hearingFieldSchema = z.object({
   required: z.boolean(),
   options: z.array(z.string()).optional(),
   description: z.string().optional(),
+  // DFCX 用 optional 拡張: スロット埋めの エンティティ型 / reprompt戦略 / 最大再質問回数
+  dfcxEntityType: dfcxEntityTypeSchema
+    .optional()
+    .describe("DFCX で使うエンティティ型 (label/key から推定可。明示するときだけ埋める)"),
+  repromptStrategy: repromptStrategySchema
+    .optional()
+    .describe("DFCX no-match 時のトーン: gentle / assertive / offer_transfer"),
+  maxReprompts: z.number().int().min(1).max(5)
+    .optional()
+    .describe("DFCX reprompt の最大回数 (default 3)"),
 });
 
 const taskFlowSchema = z.object({
   name: z.string(),
   trigger: z.string(),
   steps: z.array(z.string()),
+  // DFCX 用 optional 拡張: trigger 発話のバリエーション (Intent.trainingPhrases)
+  intentTrainingPhrases: z.array(z.string())
+    .optional()
+    .describe("DFCX 用: trigger と同義の発話バリエーション (3-5個推奨)"),
 });
 
 const chappieOutputSchema = z.object({
@@ -40,10 +66,14 @@ const chappieOutputSchema = z.object({
   guardrails: z.object({
     transferConditions: z.array(z.string()),
     prohibitedBehaviors: z.array(z.string()),
+    // DFCX 用 optional: エスカレーション専用 Intent の displayName
+    escalationIntent: z.string()
+      .optional()
+      .describe("DFCX 用: エスカレーション専用 Intent の displayName (任意)"),
   }),
 });
 
-const EXTRACTION_PROMPT = `あなたは会話ログを読み込んで、Vapi 音声AI エージェント設定に必要な情報を
+const EXTRACTION_PROMPT = `あなたは会話ログを読み込んで、音声AI エージェント設定 (Vapi & Dialogflow CX 両対応) に必要な情報を
 JSON に構造化して抜き出すアシスタントです。
 
 - 必ずすべてのフィールドを埋めること。
@@ -53,6 +83,16 @@ JSON に構造化して抜き出すアシスタントです。
 - tasks は最低 3 つ以上。trigger（どの場面で発火するか）と steps（ステップ配列）を具体的に書く。
 - hearingFields には業界標準の項目を会話からもテンプレからも拾って必ず含める。
 - doNots / transferConditions / prohibitedBehaviors はテンプレの既定値＋会話で追加された禁止事項をマージする。
+
+# DFCX 用 optional フィールドの埋め方 (任意・推測でOK):
+- hearingFields[].dfcxEntityType: label/key から推定。「お名前」→ @sys.person、「電話番号」→ @sys.phone-number、
+  「住所」→ @sys.address、「希望日時」→ @sys.date-time、「料金/月額」→ @sys.number、それ以外は @sys.any
+- hearingFields[].repromptStrategy: ペルソナのトーンから推定。「丁寧」→ gentle、「テキパキ/ハキハキ」→ assertive、
+  「サポート系/解約阻止系」→ offer_transfer
+- hearingFields[].maxReprompts: 通常は 3。重要度の高い項目で会話で「絶対聞きたい」と話されていれば 2 (早期エスカレーション)
+- tasks[].intentTrainingPhrases: trigger を 3-5 個の発話バリエーションに展開。
+  例: trigger="解約したい" → ["解約したい", "やめたい", "契約終了したい", "もう使わない"]
+- guardrails.escalationIntent: 会話で明確にエスカレーション専用の発話が定義されていれば "intent.escalation.<slug>" 形式で。
 `.trim();
 
 export async function extractChappieOutput(

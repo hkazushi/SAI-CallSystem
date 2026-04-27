@@ -208,6 +208,62 @@ export function buildStageDirective(stage: WallDiscussionStage): string {
 ${STAGE_FOCUS[stage]}`;
 }
 
+/**
+ * デプロイ先エンジンに応じた追加ディレクティブ。
+ *
+ * - "vapi"          : 柔軟型・LLM 自由生成寄りの設計を引き出す
+ * - "dialogflow_cx" : 厳格型・スロット埋めループ寄りの設計を引き出す
+ * - "both"          : 共通項目を両方に対応できるよう網羅的に確認する
+ *
+ * meta-prompt 本文の後に append して LLM に「今どっち向けに掘ってるか」を教える。
+ */
+export type ChappieEngine = "vapi" | "dialogflow_cx" | "both";
+
+export function buildEngineDirective(engine: ChappieEngine): string {
+  if (engine === "vapi") {
+    return `# 出力先エンジン: Vapi (柔軟型・LLM 自由生成)
+
+Vapi 単体向けに引き出すべき情報:
+- ペルソナのトーン (LLMに投げるシステムプロンプトに直接効く)
+- 反論時の自然な切り返し手順 (steps として柔らかく書ける)
+- ヒアリング項目は labelと description が大事 (LLM が文脈で聞き分ける)
+- 厳格な分岐構造は必須でない (LLM が状況判断する)
+
+避けるべき:
+- 「Intent」「training phrase」「entityType」など技術用語をユーザーに見せる
+- 過度に厳格なフローチャート化を強要しない
+`.trim();
+  }
+  if (engine === "dialogflow_cx") {
+    return `# 出力先エンジン: Dialogflow CX (厳格型・スロット埋めループ)
+
+DFCX 向けに必ず引き出すべき情報:
+- ヒアリング項目を「Form parameter」相当として明確化 (key / 必須/任意 / 想定回答型)
+- 反論Intent と転送Intent (training phrase は最低 3-5 個ずつ)
+- スロット埋め失敗時の reprompt 文言 (1段目→2段目→3段目→転送 の段階)
+- 分岐は明示的に (「Aの場合 → Bページ、Cの場合 → Dページ」と condition を確認)
+
+ヒアリング項目を引き出すときは特にこう聞く:
+「お名前は声で聞き取れますか？」「住所はどこまで聞きますか？」「電話番号は復唱で確認しますか？」
+スロット埋めの reprompt 戦略 (やわらかく繰り返す/きっぱり言う/担当者に転送) を必ず確認する。
+
+避けるべき:
+- 「LLM が察する前提」のあいまいな steps (DFCX は LLM 推論を直接持たないため明示が必要)
+`.trim();
+  }
+  // both
+  return `# 出力先エンジン: 両対応 (Vapi + Dialogflow CX)
+
+両エンジンにコンパイルできるよう、以下を網羅的に引き出す:
+- ペルソナのトーン (Vapi 用) と reprompt 文言 (DFCX 用) の両方
+- ヒアリング項目は labelと description (Vapi 用) + 必須/任意区分 (DFCX 用)
+- 反論パターンは「自然文の切り返し」(Vapi 用) と「training phrase 候補」(DFCX 用) を両方確保
+- 分岐条件は「LLM 文脈判断で十分」と「明示的に Page 分岐したい」のどちらかをユーザーに確認
+
+ユーザーには技術用語を見せず、「電話の流れ」「お客様の発話パターン」として掘っていく。
+`.trim();
+}
+
 const STAGE_FOCUS: Record<WallDiscussionStage, string> = {
   discovery: `
 【ゴール】業種・電話の方向（インバウンド/アウトバウンド）・自動化したい業務を掴む。
