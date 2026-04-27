@@ -6,6 +6,7 @@
  */
 
 import type { HearingField } from '../vapi-compiler/types';
+import type { DfcxBaselineOverlay } from '../dfcx-compiler/types';
 
 export type Industry = 'hikari' | 'water_server' | 'insurance' | 'real_estate' | 'hr';
 export type CallDirection = 'outbound' | 'inbound';
@@ -63,4 +64,12 @@ export interface Template {
    * 200-400 字程度で業界特有の事情を要約。
    */
   industryKnowledgeBrief: string;
+
+  /**
+   * Dialogflow CX 用ベースライン上書き (任意)。
+   * 共通ベースライン (OUTBOUND_SALES_BASELINE / INBOUND_SUPPORT_BASELINE) に
+   * 業界固有の Page / Intent / reprompt を追加するための差分。
+   * 省略時は共通ベースラインのみ適用。
+   */
+  dfcxBaseline?: DfcxBaselineOverlay;
 }

@@ -46,11 +46,17 @@ export interface ChappieOutput {
     transferConditions: string[];
     /** 言ってはいけないこと */
     prohibitedBehaviors: string[];
+    /** DFCX 用: エスカレーション専用 Intent の displayName (任意) */
+    escalationIntent?: string;
   };
 }
 
 /**
  * タスクフロー1件。複数のタスク (例: 接続不良対応 / 解約受付) をまとめて配列で持つ。
+ *
+ * DFCX 用 optional 拡張:
+ *   - intentTrainingPhrases: trigger 発話のバリエーション (Intent.trainingPhrases に展開)
+ *   - pageId: コンパイル時に自動採番 (上書き不可、デプロイ時のIDマッピング用)
  */
 export interface TaskFlow {
   /** タスク名 (例: 接続不良トラブルシューティング) */
@@ -59,11 +65,31 @@ export interface TaskFlow {
   trigger: string;
   /** ステップ (自然文の手順) */
   steps: string[];
+  /** DFCX 用: trigger 発話のバリエーション (Intent.trainingPhrases に展開) */
+  intentTrainingPhrases?: string[];
+  /** DFCX 用: 関連 Page displayName (compile 時に自動設定) */
+  pageId?: string;
 }
 
 /**
  * ヒアリング項目。Vapi の Structured Output (JSON Schema) 生成にも使う。
+ *
+ * DFCX 用 optional 拡張:
+ *   - dfcxEntityType: スロット埋めで使う @sys.* エンティティ型
+ *   - repromptStrategy: no-match 時の文言トーン
+ *   - maxReprompts: リプロンプトの最大回数 (default 3)
  */
+export type DfcxEntityTypeRef =
+  | "@sys.person"
+  | "@sys.phone-number"
+  | "@sys.address"
+  | "@sys.date-time"
+  | "@sys.number"
+  | "@sys.email"
+  | "@sys.any";
+
+export type RepromptStrategy = "gentle" | "assertive" | "offer_transfer";
+
 export interface HearingField {
   /** プロパティ名 (snake_case) */
   key: string;
@@ -77,6 +103,12 @@ export interface HearingField {
   options?: string[];
   /** Chappie が収集意図を説明する文 */
   description?: string;
+  /** DFCX 用: スロット埋めで使うエンティティ型 (省略時は label/key から推定) */
+  dfcxEntityType?: DfcxEntityTypeRef;
+  /** DFCX 用: no-match 時の文言トーン */
+  repromptStrategy?: RepromptStrategy;
+  /** DFCX 用: リプロンプト最大回数 (default 3) */
+  maxReprompts?: number;
 }
 
 /**
