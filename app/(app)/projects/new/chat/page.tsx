@@ -11,6 +11,7 @@ import { STAGE_ORDER } from "@/lib/chappie/types";
 import { parseChoices } from "@/lib/chappie/quick-replies";
 import type { ChappieMessageMetadata } from "@/app/api/chappie/chat/route";
 import type { ChappieOutput } from "@/lib/vapi-compiler/types";
+import type { ChappieEngine } from "@/lib/chappie/meta-prompt";
 import { FileUploadZone, type AttachedFile } from "@/components/chappie/FileUploadZone";
 import { VapiCallWidget } from "@/components/vapi-call-widget";
 import {
@@ -110,7 +111,9 @@ export default function ChappieChatPage() {
 
 function ChappieChatInner() {
   const searchParams = useSearchParams();
-  const engine = searchParams.get("engine") ?? "vapi";
+  const engineParam = searchParams.get("engine");
+  const engine: ChappieEngine =
+    engineParam === "dialogflow_cx" || engineParam === "both" ? engineParam : "vapi";
   const templateId = searchParams.get("template");
   const template = templateId ? getTemplate(templateId) : undefined;
 
@@ -153,6 +156,7 @@ function ChappieChatInner() {
           messages,
           templateId: template?.id,
           attachments: readyAttachments,
+          engine,
         },
       }),
     }),
@@ -211,11 +215,13 @@ function ChappieChatInner() {
 
   const [input, setInput] = useState("");
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
+  const [pendingTarget, setPendingTarget] = useState<"vapi" | "dfcx" | null>(null);
   const [deployState, setDeployState] = useState<
     | { kind: "idle" }
-    | { kind: "extracting" }
-    | { kind: "deploying" }
-    | { kind: "success"; assistantId: string; name: string }
+    | { kind: "extracting"; target: "vapi" | "dfcx" }
+    | { kind: "deploying"; target: "vapi" | "dfcx" }
+    | { kind: "success"; target: "vapi"; assistantId: string; name: string }
+    | { kind: "dfcx_success"; agentId: string; agentName: string; trainOperationName?: string }
     | { kind: "error"; error: string }
   >({ kind: "idle" });
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -268,36 +274,43 @@ function ChappieChatInner() {
     }
   }
 
-  function handleDeployClick() {
-    if (isDeploying || deployState.kind === "success") return;
+  function handleDeployClick(target: "vapi" | "dfcx") {
+    if (isDeploying || deployState.kind === "success" || deployState.kind === "dfcx_success") return;
     if (!reachedReview) {
+      setPendingTarget(target);
       setShowIncompleteWarning(true);
       return;
     }
-    void runDeployToVapi();
+    if (target === "vapi") void runDeployToVapi();
+    else void runDeployToDfcx();
+  }
+
+  async function extractOutput(): Promise<ChappieOutput> {
+    const extractRes = await fetch("/api/chappie/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        templateId: template?.id,
+        attachments: readyAttachments,
+      }),
+    });
+    if (!extractRes.ok) {
+      const err = (await extractRes.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error ?? `extract failed: ${extractRes.status}`);
+    }
+    const { output } = (await extractRes.json()) as { output: ChappieOutput };
+    return output;
   }
 
   async function runDeployToVapi() {
-    if (isDeploying || deployState.kind === "success") return;
+    if (isDeploying || deployState.kind === "success" || deployState.kind === "dfcx_success") return;
 
-    setDeployState({ kind: "extracting" });
+    setDeployState({ kind: "extracting", target: "vapi" });
     try {
-      const extractRes = await fetch("/api/chappie/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages,
-          templateId: template?.id,
-          attachments: readyAttachments,
-        }),
-      });
-      if (!extractRes.ok) {
-        const err = (await extractRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? `extract failed: ${extractRes.status}`);
-      }
-      const { output } = (await extractRes.json()) as { output: ChappieOutput };
+      const output = await extractOutput();
 
-      setDeployState({ kind: "deploying" });
+      setDeployState({ kind: "deploying", target: "vapi" });
       const projectId = `new-${Date.now()}`;
       const deployRes = await fetch(`/api/projects/${projectId}/deploy-vapi`, {
         method: "POST",
@@ -311,8 +324,55 @@ function ChappieChatInner() {
       const result = (await deployRes.json()) as { assistantId: string; name: string };
       setDeployState({
         kind: "success",
+        target: "vapi",
         assistantId: result.assistantId,
         name: result.name,
+      });
+    } catch (err) {
+      setDeployState({
+        kind: "error",
+        error: err instanceof Error ? err.message : "unknown error",
+      });
+    }
+  }
+
+  async function runDeployToDfcx() {
+    if (isDeploying || deployState.kind === "success" || deployState.kind === "dfcx_success") return;
+
+    setDeployState({ kind: "extracting", target: "dfcx" });
+    try {
+      const output = await extractOutput();
+
+      setDeployState({ kind: "deploying", target: "dfcx" });
+      const projectId = `new-${Date.now()}`;
+      const deployRes = await fetch(`/api/projects/${projectId}/deploy-dialogflow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          output,
+          template,
+          tenantId: projectId,
+        }),
+      });
+      if (!deployRes.ok) {
+        const err = (await deployRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? `deploy failed: ${deployRes.status}`);
+      }
+      const result = (await deployRes.json()) as {
+        ok: boolean;
+        agentId?: string;
+        agentName?: string;
+        trainOperationName?: string;
+        error?: string;
+      };
+      if (!result.ok || !result.agentId || !result.agentName) {
+        throw new Error(result.error ?? "DFCX deploy did not return agent");
+      }
+      setDeployState({
+        kind: "dfcx_success",
+        agentId: result.agentId,
+        agentName: result.agentName,
+        trainOperationName: result.trainOperationName,
       });
     } catch (err) {
       setDeployState({
@@ -341,16 +401,20 @@ function ChappieChatInner() {
               {/* AIエンジン */}
               <div>
                 <p className="text-[10px] text-muted-foreground/40 mb-1">AIエンジン</p>
-                <div className="flex items-center gap-1.5">
-                  {engine === "vapi" ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(engine === "vapi" || engine === "both") && (
                     <>
                       <Zap className="w-3 h-3 text-amber-400" />
-                      <span className="text-[12px] font-medium">Vapi.ai（柔軟型）</span>
+                      <span className="text-[12px] font-medium">Vapi.ai</span>
                     </>
-                  ) : (
+                  )}
+                  {engine === "both" && (
+                    <span className="text-[10px] text-muted-foreground/40 mx-1">/</span>
+                  )}
+                  {(engine === "dialogflow_cx" || engine === "both") && (
                     <>
                       <Bot className="w-3 h-3 text-blue-400" />
-                      <span className="text-[12px] font-medium">Dialogflow CX（厳格型）</span>
+                      <span className="text-[12px] font-medium">Dialogflow CX</span>
                     </>
                   )}
                 </div>
@@ -475,31 +539,102 @@ function ChappieChatInner() {
                   </Button>
                 </a>
               </div>
-            ) : (
-              <>
-                <Button
-                  onClick={handleDeployClick}
-                  disabled={isDeploying}
-                  className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
-                >
-                  {deployState.kind === "extracting" ? (
+            ) : deployState.kind === "dfcx_success" ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-emerald-400 text-[12px] font-semibold">
+                  <Check className="w-3 h-3" />
+                  Dialogflow CX Agent 作成完了
+                </div>
+                <div className="rounded-md bg-white/5 p-2 space-y-1">
+                  <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">
+                    agentId
+                  </p>
+                  <p className="text-[11px] font-medium break-all">{deployState.agentId}</p>
+                  <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">
+                    agentName
+                  </p>
+                  <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
+                    {deployState.agentName}
+                  </p>
+                  {deployState.trainOperationName && (
                     <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      情報を抽出中…
-                    </>
-                  ) : deployState.kind === "deploying" ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Vapiへ送信中…
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3 h-3" />
-                      Vapi Assistant を作成
+                      <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1.5">
+                        train operation
+                      </p>
+                      <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
+                        {deployState.trainOperationName}
+                      </p>
                     </>
                   )}
-                </Button>
-                {!reachedReview && deployState.kind !== "extracting" && deployState.kind !== "deploying" && (
+                </div>
+                <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+                  GCP Console の Conversational Agents で動作確認できます。Train ジョブが完了するまで数分かかる場合があります。
+                </p>
+                <a
+                  href={`https://dialogflow.cloud.google.com/cx/${deployState.agentName}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block"
+                >
+                  <Button
+                    className="w-full h-8 text-[11px] gap-1.5 text-muted-foreground/70 hover:text-foreground"
+                    variant="ghost"
+                  >
+                    GCP Console で開く <ExternalLink className="w-3 h-3" />
+                  </Button>
+                </a>
+              </div>
+            ) : (
+              <>
+                {(engine === "vapi" || engine === "both") && (
+                  <Button
+                    onClick={() => handleDeployClick("vapi")}
+                    disabled={isDeploying}
+                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                  >
+                    {deployState.kind === "extracting" && deployState.target === "vapi" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        情報を抽出中…
+                      </>
+                    ) : deployState.kind === "deploying" && deployState.target === "vapi" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Vapiへ送信中…
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3 h-3" />
+                        Vapi Assistant を作成
+                      </>
+                    )}
+                  </Button>
+                )}
+                {(engine === "dialogflow_cx" || engine === "both") && (
+                  <Button
+                    onClick={() => handleDeployClick("dfcx")}
+                    disabled={isDeploying}
+                    className="w-full bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/30 text-blue-100 h-9 text-[12px] font-semibold gap-1.5"
+                  >
+                    {deployState.kind === "extracting" && deployState.target === "dfcx" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        情報を抽出中…
+                      </>
+                    ) : deployState.kind === "deploying" && deployState.target === "dfcx" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Dialogflow CX へ送信中…
+                      </>
+                    ) : (
+                      <>
+                        <Bot className="w-3 h-3" />
+                        Dialogflow CX にデプロイ
+                      </>
+                    )}
+                  </Button>
+                )}
+                {!reachedReview && !isDeploying && (
                   <p className="text-[10px] text-amber-300/70 leading-relaxed">
                     ※ まだヒアリング途中です。途中でも作成できますが、内容が不完全になります。
                   </p>
@@ -541,12 +676,16 @@ function ChappieChatInner() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>壁打ちを続ける</AlertDialogCancel>
+                <AlertDialogCancel onClick={() => setPendingTarget(null)}>
+                  壁打ちを続ける
+                </AlertDialogCancel>
                 <AlertDialogAction
                   className="gradient-bg border-0 hover:opacity-85"
                   onClick={() => {
                     setShowIncompleteWarning(false);
-                    void runDeployToVapi();
+                    if (pendingTarget === "dfcx") void runDeployToDfcx();
+                    else void runDeployToVapi();
+                    setPendingTarget(null);
                   }}
                 >
                   このまま作成する

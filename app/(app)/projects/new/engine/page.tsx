@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageTransition } from "@/components/ui/page-transition";
-import { Zap, Bot, ArrowRight, Check, AlertTriangle } from "lucide-react";
+import { Zap, Bot, Layers, ArrowRight, Check, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
 const engines = [
@@ -34,6 +34,20 @@ const engines = [
     accentColor: "border-blue-400/25 hover:border-blue-400/40",
     accentBg: "bg-blue-500/3",
   },
+  {
+    id: "both",
+    icon: Layers,
+    iconColor: "text-purple-400",
+    iconBg: "bg-purple-400/10",
+    title: "両方（並行）",
+    subtitle: "Vapi & Dialogflow CX 同時生成",
+    description: "1回のヒアリングから両方のエンジンに同時にデプロイし、A/B比較や用途別に使い分けることができます。",
+    pros: ["A/B比較がしやすい", "用途別に切り替え可能", "壁打ち1回で両方完成"],
+    cons: ["両方のコストが発生", "メンテナンス対象が2つになる"],
+    useCases: "比較検証フェーズ、本番＋バックアップ、フェーズ別の使い分け",
+    accentColor: "border-purple-400/25 hover:border-purple-400/40",
+    accentBg: "bg-purple-500/3",
+  },
 ];
 
 export default function EngineSelectPage() {
@@ -42,7 +56,7 @@ export default function EngineSelectPage() {
       <div className="p-6 space-y-6 max-w-[900px]">
         <PageHeader title="AIエンジン選択" description="プロジェクトで使用するAIエンジンを選択してください" />
 
-        <div className="grid md:grid-cols-2 gap-5">
+        <div className="grid md:grid-cols-3 gap-5">
           {engines.map((eng, i) => (
             <motion.div
               key={eng.id}
