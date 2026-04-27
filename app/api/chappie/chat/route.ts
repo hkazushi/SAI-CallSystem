@@ -13,7 +13,6 @@
  * Response: AI SDK UI message stream (SSE) — messageMetadata に現在 stage を載せる。
  */
 import { streamText, convertToModelMessages, type UIMessage } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { NextResponse } from "next/server";
 import {
   CHAPPIE_META_PROMPT,
@@ -93,7 +92,7 @@ export async function POST(req: Request) {
   const system = sections.join("\n\n");
 
   const result = streamText({
-    model: anthropic("claude-opus-4-7"),
+    model: "anthropic/claude-opus-4.7",
     system,
     messages: modelMessages,
     temperature: 0.6,

@@ -5,7 +5,6 @@
  * モデルは AI Gateway 経由で anthropic/claude-sonnet-4.6 を呼ぶ。抽出は境界が明確なので Opus 相当は不要。
  */
 import { generateText, Output } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import type { ChappieOutput } from "../vapi-compiler/types";
 import type { Template } from "@/lib/templates/types";
@@ -37,9 +36,9 @@ const hearingFieldSchema = z.object({
   repromptStrategy: repromptStrategySchema
     .optional()
     .describe("DFCX no-match 時のトーン: gentle / assertive / offer_transfer"),
-  maxReprompts: z.number().int().min(1).max(5)
+  maxReprompts: z.number().int()
     .optional()
-    .describe("DFCX reprompt の最大回数 (default 3)"),
+    .describe("DFCX reprompt の最大回数 (推奨 1-5、default 3)"),
 });
 
 const taskFlowSchema = z.object({
@@ -124,7 +123,7 @@ export async function extractChappieOutput(
   );
 
   const result = await generateText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: "anthropic/claude-sonnet-4.6",
     output: Output.object({ schema: chappieOutputSchema }),
     system: EXTRACTION_PROMPT,
     messages: [{ role: "user", content: sections.join("\n\n---\n\n") }],
