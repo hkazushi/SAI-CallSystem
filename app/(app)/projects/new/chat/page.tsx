@@ -571,6 +571,16 @@ function ChappieChatInner() {
                   GCP Console の Conversational Agents で動作確認できます。Train ジョブが完了するまで数分かかる場合があります。
                 </p>
                 <a
+                  href={`/projects/new/test-voice?agentName=${encodeURIComponent(deployState.agentName)}`}
+                  className="block"
+                >
+                  <Button
+                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                  >
+                    🎤 ブラウザで音声テストする
+                  </Button>
+                </a>
+                <a
                   href={`https://dialogflow.cloud.google.com/cx/${deployState.agentName}`}
                   target="_blank"
                   rel="noreferrer"
