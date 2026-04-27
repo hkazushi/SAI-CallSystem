@@ -37,9 +37,9 @@ const hearingFieldSchema = z.object({
   repromptStrategy: repromptStrategySchema
     .optional()
     .describe("DFCX no-match 時のトーン: gentle / assertive / offer_transfer"),
-  maxReprompts: z.number().int()
+  maxReprompts: z.number()
     .optional()
-    .describe("DFCX reprompt の最大回数 (推奨 1-5、default 3)"),
+    .describe("DFCX reprompt の最大回数 (整数 1-5、default 3)"),
 });
 
 const taskFlowSchema = z.object({
