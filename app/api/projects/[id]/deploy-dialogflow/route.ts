@@ -126,16 +126,15 @@ export async function POST(req: Request, { params }: RouteContext) {
       intentNameMap.set(intent.displayName, created.name);
     }
 
-    // ---------- Step 5: Pages 作成 (transitionRoutes は ID 解決後に PATCH するので一旦空で) ----------
+    // ---------- Step 5: Pages 作成 (eventHandlers / transitionRoutes は ID 解決後に PATCH) ----------
     const flowResource = defaultFlow.name;
     const pageNameMap = new Map<string, string>(); // displayName → resource name
     for (const page of config.pages) {
-      const skeleton = {
+      const skeleton: Record<string, unknown> = {
         displayName: page.displayName,
         entryFulfillment: page.entryFulfillment,
-        form: page.form,
-        eventHandlers: page.eventHandlers,
       };
+      if (page.form) skeleton.form = normalizeForm(page.form);
       const created = await dfcxFetch<{ name: string }>(
         `/${flowResource}/pages`,
         {
@@ -147,45 +146,71 @@ export async function POST(req: Request, { params }: RouteContext) {
       pageNameMap.set(page.displayName, created.name);
     }
 
-    // ---------- Step 6: Pages PATCH (transitionRoutes 解決) ----------
+    // ---------- Step 6: Pages PATCH (transitionRoutes / eventHandlers / form を resolved 値で更新) ----------
     for (const page of config.pages) {
-      if (!page.transitionRoutes || page.transitionRoutes.length === 0) continue;
-      const resolved = page.transitionRoutes.map((route) =>
-        resolveTransitionRoute(route, intentNameMap, pageNameMap),
-      );
+      const hasRoutes = page.transitionRoutes && page.transitionRoutes.length > 0;
+      const hasHandlers = page.eventHandlers && page.eventHandlers.length > 0;
+      const hasForm = !!page.form && page.form.parameters.length > 0;
+      if (!hasRoutes && !hasHandlers && !hasForm) continue;
+
+      const patchBody: Record<string, unknown> = {};
+      const updateMask: string[] = [];
+      if (hasRoutes) {
+        patchBody.transitionRoutes = page.transitionRoutes!.map((route) =>
+          resolveTransitionRoute(route, intentNameMap, pageNameMap, flowResource),
+        );
+        updateMask.push("transitionRoutes");
+      }
+      if (hasHandlers) {
+        patchBody.eventHandlers = page.eventHandlers!.map((h) =>
+          resolveEventHandler(h, pageNameMap, flowResource),
+        );
+        updateMask.push("eventHandlers");
+      }
+      if (hasForm) {
+        patchBody.form = resolveForm(page.form!, pageNameMap, flowResource);
+        updateMask.push("form");
+      }
       const pageResource = pageNameMap.get(page.displayName)!;
       await dfcxFetch(
-        `/${pageResource}?updateMask=transitionRoutes`,
+        `/${pageResource}?updateMask=${updateMask.join(",")}`,
         {
           method: "PATCH",
-          body: JSON.stringify({ transitionRoutes: resolved }),
+          body: JSON.stringify(patchBody),
         },
         { location },
       );
     }
 
-    // ---------- Step 7: Webhook 登録 ----------
-    await dfcxFetch(
-      `/${createdAgentName}/webhooks`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          displayName: `sai-fulfillment-${tenantId}`,
-          genericWebService: {
-            uri: config.webhookUrl,
-            requestHeaders: {
-              "X-Sai-Tenant": tenantId,
+    // ---------- Step 7: Webhook 登録 (DFCX は https 必須なのでローカル http はスキップ) ----------
+    const webhookIsHttps = config.webhookUrl.startsWith("https://");
+    if (webhookIsHttps) {
+      await dfcxFetch(
+        `/${createdAgentName}/webhooks`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            displayName: `sai-fulfillment-${tenantId}`,
+            genericWebService: {
+              uri: config.webhookUrl,
+              requestHeaders: {
+                "X-Sai-Tenant": tenantId,
+              },
             },
-          },
-          timeout: "10s",
-        }),
-      },
-      { location },
-    );
+            timeout: "10s",
+          }),
+        },
+        { location },
+      );
+    } else {
+      console.warn(
+        `[deploy-dialogflow] webhook URL is not https (got ${config.webhookUrl}), skipping webhook registration. Set NEXT_PUBLIC_APP_URL to an https URL to enable.`,
+      );
+    }
 
-    // ---------- Step 8: Train (非同期) ----------
+    // ---------- Step 8: Train (非同期、Flow 単位) ----------
     const trainOp = await dfcxFetch<{ name: string }>(
-      `/${createdAgentName}:train`,
+      `/${flowResource}:train`,
       { method: "POST", body: JSON.stringify({}) },
       { location },
     );
@@ -245,6 +270,7 @@ function resolveTransitionRoute(
   route: DfcxTransitionRoute,
   intents: Map<string, string>,
   pages: Map<string, string>,
+  flowResource: string,
 ) {
   const resolved: Record<string, unknown> = {};
   if (route.intent) {
@@ -255,12 +281,117 @@ function resolveTransitionRoute(
   if (route.condition) resolved.condition = route.condition;
   if (route.triggerFulfillment) resolved.triggerFulfillment = route.triggerFulfillment;
   if (route.targetPage) {
-    const pageResource = pages.get(route.targetPage);
-    if (!pageResource) throw new Error(`Target page not found: ${route.targetPage}`);
-    resolved.targetPage = pageResource;
+    resolved.targetPage = resolveTargetPage(route.targetPage, pages, flowResource);
   }
   if (route.targetFlow) resolved.targetFlow = route.targetFlow;
   return resolved;
+}
+
+function resolveEventHandler(
+  handler: { event: string; triggerFulfillment?: unknown; targetPage?: string; targetFlow?: string },
+  pages: Map<string, string>,
+  flowResource: string,
+) {
+  const resolved: Record<string, unknown> = { event: handler.event };
+  if (handler.triggerFulfillment) resolved.triggerFulfillment = handler.triggerFulfillment;
+  if (handler.targetPage) {
+    resolved.targetPage = resolveTargetPage(handler.targetPage, pages, flowResource);
+  }
+  if (handler.targetFlow) resolved.targetFlow = handler.targetFlow;
+  return resolved;
+}
+
+/**
+ * Step 5 用: entityType を REST 形式に正規化し、Page リソース未確定のため targetPage を剥がす。
+ * Step 6 PATCH で resolveForm() を呼んで targetPage 解決した完全版に置換する。
+ */
+function normalizeForm(form: { parameters: ReadonlyArray<unknown> }) {
+  return {
+    ...form,
+    parameters: form.parameters.map((p) => {
+      const param = p as {
+        entityType?: unknown;
+        fillBehavior?: { repromptEventHandlers?: ReadonlyArray<unknown> } & Record<string, unknown>;
+      };
+      const entityType = typeof param.entityType === "string" ? normalizeEntityType(param.entityType) : param.entityType;
+      const handlers = param.fillBehavior?.repromptEventHandlers;
+      const strippedHandlers = handlers?.map((h) => {
+        const handler = h as Record<string, unknown>;
+        const { targetPage: _ignored, ...rest } = handler;
+        return rest;
+      });
+      const next: Record<string, unknown> = { ...(p as object), entityType };
+      if (param.fillBehavior) {
+        next.fillBehavior = {
+          ...param.fillBehavior,
+          ...(strippedHandlers ? { repromptEventHandlers: strippedHandlers } : {}),
+        };
+      }
+      return next;
+    }),
+  };
+}
+
+/**
+ * Step 6 用: form の repromptEventHandlers[].targetPage を resolveTargetPage で解決した完全版を返す。
+ */
+function resolveForm(
+  form: { parameters: ReadonlyArray<unknown> },
+  pages: Map<string, string>,
+  flowResource: string,
+) {
+  return {
+    ...form,
+    parameters: form.parameters.map((p) => {
+      const param = p as {
+        entityType?: unknown;
+        fillBehavior?: { repromptEventHandlers?: ReadonlyArray<unknown> } & Record<string, unknown>;
+      };
+      const entityType = typeof param.entityType === "string" ? normalizeEntityType(param.entityType) : param.entityType;
+      const handlers = param.fillBehavior?.repromptEventHandlers;
+      const resolvedHandlers = handlers?.map((h) => {
+        const handler = h as { event?: string; triggerFulfillment?: unknown; targetPage?: string };
+        return resolveEventHandler(
+          { event: handler.event ?? "", triggerFulfillment: handler.triggerFulfillment, targetPage: handler.targetPage },
+          pages,
+          flowResource,
+        );
+      });
+      const next: Record<string, unknown> = { ...(p as object), entityType };
+      if (param.fillBehavior) {
+        next.fillBehavior = {
+          ...param.fillBehavior,
+          ...(resolvedHandlers ? { repromptEventHandlers: resolvedHandlers } : {}),
+        };
+      }
+      return next;
+    }),
+  };
+}
+
+function normalizeEntityType(entityType: string): string {
+  return entityType.startsWith("@")
+    ? `projects/-/locations/-/agents/-/entityTypes/${entityType.slice(1)}`
+    : entityType;
+}
+
+function resolveTargetPage(
+  ref: string,
+  pages: Map<string, string>,
+  flowResource: string,
+): string {
+  if (ref === "End Session" || ref === "END_SESSION") {
+    return `${flowResource}/pages/END_SESSION`;
+  }
+  if (ref === "End Flow" || ref === "END_FLOW") {
+    return `${flowResource}/pages/END_FLOW`;
+  }
+  if (ref === "Start Page" || ref === "START_PAGE") {
+    return `${flowResource}/pages/START_PAGE`;
+  }
+  const resource = pages.get(ref);
+  if (!resource) throw new Error(`Target page not found: ${ref}`);
+  return resource;
 }
 
 // 型ヒント用 (未使用だが将来参照する可能性があるため残す)
