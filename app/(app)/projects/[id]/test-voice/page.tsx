@@ -14,11 +14,11 @@ type Turn = {
 };
 
 // VAD (Voice Activity Detection) パラメータ
-const SILENCE_THRESHOLD = 0.005;        // RMS 閾値: これより小さいと「無音」
+const SILENCE_THRESHOLD = 0.013;        // RMS 閾値: これより小さいと「無音」
 const SILENCE_DURATION_MS = 900;        // 連続無音時間: これを超えたら発話終了とみなす
 const MIN_SPEECH_DURATION_MS = 400;     // 最低発話時間: これより短い録音は破棄
 const MAX_RECORDING_MS = 15000;         // 最大録音時間: 暴走防止
-const POST_PLAY_DELAY_MS = 300;         // agent 発話直後の待機（残響/エコー回避）
+const POST_PLAY_DELAY_MS = 800;         // agent 発話直後の待機（残響/エコー回避）
 
 function TestVoiceInner() {
   const params = useParams<{ id: string }>();
@@ -156,6 +156,9 @@ function TestVoiceInner() {
   const recordAndRespond = useCallback(async () => {
     if (!callActiveRef.current) return;
     if (!streamRef.current || !analyserRef.current) return;
+    // listening 開始前に入力バッファをフラッシュ（agent音声の残骸を捨てる）
+    const flushBuf = new Float32Array(analyserRef.current.fftSize);
+    for (let i = 0; i < 5; i++) analyserRef.current.getFloatTimeDomainData(flushBuf);
 
     setStatus("listening");
     speechDetectedRef.current = false;

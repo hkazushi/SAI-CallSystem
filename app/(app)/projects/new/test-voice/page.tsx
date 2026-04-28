@@ -13,11 +13,11 @@ type Turn = {
   audioUrl?: string;
 };
 
-const SILENCE_THRESHOLD = 0.005;
+const SILENCE_THRESHOLD = 0.013;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_DURATION_MS = 400;
 const MAX_RECORDING_MS = 15000;
-const POST_PLAY_DELAY_MS = 300;
+const POST_PLAY_DELAY_MS = 800;
 
 function TestVoiceInner() {
   const search = useSearchParams();
@@ -149,6 +149,8 @@ function TestVoiceInner() {
   const recordAndRespond = useCallback(async () => {
     if (!callActiveRef.current) return;
     if (!streamRef.current || !analyserRef.current) return;
+    const flushBuf = new Float32Array(analyserRef.current.fftSize);
+    for (let i = 0; i < 5; i++) analyserRef.current.getFloatTimeDomainData(flushBuf);
 
     setStatus("listening");
     speechDetectedRef.current = false;
