@@ -130,6 +130,11 @@ export async function POST(req: Request, { params }: RouteContext) {
 
 /* ---------------- helpers ---------------- */
 
+// ADC user creds 経由の場合は quota project ヘッダーが必須
+function quotaProject(): string | undefined {
+  return process.env.GOOGLE_CLOUD_QUOTA_PROJECT ?? process.env.GCP_PROJECT_ID;
+}
+
 async function transcribe(args: {
   token: string;
   gcpProjectId: string;
@@ -144,6 +149,7 @@ async function transcribe(args: {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${args.token}`,
+      ...(quotaProject() ? { "X-Goog-User-Project": quotaProject()! } : {}),
     },
     body: JSON.stringify({
       config: {
@@ -202,6 +208,7 @@ async function detectIntent(args: {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${args.token}`,
+      ...(quotaProject() ? { "X-Goog-User-Project": quotaProject()! } : {}),
     },
     body: JSON.stringify({
       queryInput: {
@@ -238,6 +245,7 @@ async function synthesize(args: {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${args.token}`,
+      ...(quotaProject() ? { "X-Goog-User-Project": quotaProject()! } : {}),
     },
     body: JSON.stringify({
       input: { text: args.text },
