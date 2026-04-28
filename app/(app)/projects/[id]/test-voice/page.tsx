@@ -144,6 +144,9 @@ function TestVoiceInner() {
   }, []);
 
   /** 1ターン録音 → 送信 → 応答再生 */
+  // 手動送信用: ユーザーが「送信」ボタンを押した時にも stopAndSend を発火
+  const manualSendRef = useRef<(() => void) | null>(null);
+
   const recordAndRespond = useCallback(async () => {
     if (!callActiveRef.current) return;
     if (!streamRef.current || !analyserRef.current) return;
@@ -164,8 +167,11 @@ function TestVoiceInner() {
       if (recorder.state !== "inactive") {
         try { recorder.stop(); } catch { /* noop */ }
       }
+      // recorder.stop() は非同期なので少し待って chunks が確定するのを待つ
+      await new Promise((r) => setTimeout(r, 100));
       const elapsed = Date.now() - recordingStartRef.current;
       const blob = new Blob(chunks, { type: mimeType });
+      console.log("[stopAndSend]", { elapsed, blobSize: blob.size, speechDetected: speechDetectedRef.current });
       // 短すぎる、または無音だけ → 破棄して次ループ
       if (!speechDetectedRef.current || elapsed < MIN_SPEECH_DURATION_MS || blob.size < 1000) {
         if (callActiveRef.current) recordAndRespond();
@@ -185,6 +191,12 @@ function TestVoiceInner() {
       if (callActiveRef.current) recordAndRespond();
     };
 
+    // 手動送信できるように関数を ref に保存
+    manualSendRef.current = () => {
+      speechDetectedRef.current = true;  // 強制的に「発話あり」扱い
+      stopAndSend();
+    };
+
     recorder.start();
 
     // VAD ループ: requestAnimationFrame で RMS を測る
@@ -201,6 +213,8 @@ function TestVoiceInner() {
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
       const rms = Math.sqrt(sum / buf.length);
       setVadLevel(Math.min(1, rms / 0.05));
+      // 100フレームに1回、RMSをログに出す（デバッグ用）
+      if (Math.random() < 0.01) console.log("[VAD]", { rms: rms.toFixed(4), threshold: SILENCE_THRESHOLD, speechDetected: speechDetectedRef.current });
       if (rms > SILENCE_THRESHOLD) {
         // 発話中
         speechDetectedRef.current = true;
@@ -385,14 +399,24 @@ function TestVoiceInner() {
                 {statusLabel[status]}
               </p>
               {status === "listening" && (
-                <div className="flex items-center gap-2">
-                  <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-400 transition-[width] duration-75"
-                      style={{ width: `${Math.round(vadLevel * 100)}%` }}
-                    />
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-400 transition-[width] duration-75"
+                        style={{ width: `${Math.round(vadLevel * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 font-mono">{(vadLevel * 100).toFixed(0)}%</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground/60 font-mono">{(vadLevel * 100).toFixed(0)}%</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => manualSendRef.current?.()}
+                    className="h-7 text-[11px]"
+                  >
+                    手動で送信
+                  </Button>
                 </div>
               )}
             </div>
