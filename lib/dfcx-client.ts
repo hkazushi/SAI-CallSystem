@@ -83,11 +83,14 @@ export async function dfcxFetch<T>(
   const token = await getAccessToken();
   const base = dfcxApiBase(options?.location);
   const url = path.startsWith("http") ? path : `${base}${path}`;
+  // ADC user creds 経由の場合は quota project ヘッダーが必須
+  const quotaProject = process.env.GOOGLE_CLOUD_QUOTA_PROJECT ?? process.env.GCP_PROJECT_ID;
   const resp = await fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      ...(quotaProject ? { "X-Goog-User-Project": quotaProject } : {}),
       ...(init.headers ?? {}),
     },
   });
