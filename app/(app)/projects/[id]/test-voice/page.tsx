@@ -14,10 +14,11 @@ type Turn = {
 };
 
 // VAD (Voice Activity Detection) パラメータ
-const SILENCE_THRESHOLD = 0.012;        // RMS 閾値: これより小さいと「無音」
+const SILENCE_THRESHOLD = 0.005;        // RMS 閾値: これより小さいと「無音」
 const SILENCE_DURATION_MS = 900;        // 連続無音時間: これを超えたら発話終了とみなす
 const MIN_SPEECH_DURATION_MS = 400;     // 最低発話時間: これより短い録音は破棄
 const MAX_RECORDING_MS = 15000;         // 最大録音時間: 暴走防止
+const POST_PLAY_DELAY_MS = 300;         // agent 発話直後の待機（残響/エコー回避）
 
 function TestVoiceInner() {
   const params = useParams<{ id: string }>();
@@ -28,6 +29,7 @@ function TestVoiceInner() {
   const [sessionId, setSessionId] = useState<string>("");
   const [callActive, setCallActive] = useState(false);  // 通話中
   const [status, setStatus] = useState<"idle" | "greeting" | "listening" | "thinking" | "speaking">("idle");
+  const [vadLevel, setVadLevel] = useState(0);  // 0..1 マイク入力レベル (UI表示用)
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [permission, setPermission] = useState<"prompt" | "granted" | "denied">("prompt");
@@ -178,6 +180,7 @@ function TestVoiceInner() {
       if (result.audioUrl) {
         setStatus("speaking");
         await playAudio(result.audioUrl);
+        await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
       if (callActiveRef.current) recordAndRespond();
     };
@@ -197,6 +200,7 @@ function TestVoiceInner() {
       let sum = 0;
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
       const rms = Math.sqrt(sum / buf.length);
+      setVadLevel(Math.min(1, rms / 0.05));
       if (rms > SILENCE_THRESHOLD) {
         // 発話中
         speechDetectedRef.current = true;
@@ -221,7 +225,13 @@ function TestVoiceInner() {
     setError(null);
     setTurns([]);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       setPermission("granted");
       // AudioContext for VAD
@@ -245,6 +255,7 @@ function TestVoiceInner() {
       if (greet.audioUrl) {
         setStatus("speaking");
         await playAudio(greet.audioUrl);
+        await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
       // 2. ループ開始
       if (callActiveRef.current) recordAndRespond();
@@ -368,10 +379,23 @@ function TestVoiceInner() {
             </Button>
           </div>
           {callActive && (
-            <p className="text-[11px] text-muted-foreground/70 inline-flex items-center gap-1.5">
-              {status === "thinking" || status === "greeting" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mic className="w-3 h-3" />}
-              {statusLabel[status]}
-            </p>
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-[11px] text-muted-foreground/70 inline-flex items-center gap-1.5">
+                {status === "thinking" || status === "greeting" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mic className="w-3 h-3" />}
+                {statusLabel[status]}
+              </p>
+              {status === "listening" && (
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-400 transition-[width] duration-75"
+                      style={{ width: `${Math.round(vadLevel * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground/60 font-mono">{(vadLevel * 100).toFixed(0)}%</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

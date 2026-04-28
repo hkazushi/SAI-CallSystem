@@ -13,10 +13,11 @@ type Turn = {
   audioUrl?: string;
 };
 
-const SILENCE_THRESHOLD = 0.012;
+const SILENCE_THRESHOLD = 0.005;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_DURATION_MS = 400;
 const MAX_RECORDING_MS = 15000;
+const POST_PLAY_DELAY_MS = 300;
 
 function TestVoiceInner() {
   const search = useSearchParams();
@@ -171,6 +172,7 @@ function TestVoiceInner() {
       if (result.audioUrl) {
         setStatus("speaking");
         await playAudio(result.audioUrl);
+        await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
       if (callActiveRef.current) recordAndRespond();
     };
@@ -210,7 +212,13 @@ function TestVoiceInner() {
     setError(null);
     setTurns([]);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       setPermission("granted");
       const ctx = new AudioContext();
@@ -232,6 +240,7 @@ function TestVoiceInner() {
       if (greet.audioUrl) {
         setStatus("speaking");
         await playAudio(greet.audioUrl);
+        await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
       if (callActiveRef.current) recordAndRespond();
     } catch (e) {
