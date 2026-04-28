@@ -179,8 +179,10 @@ function mergeIntentsByName(intents: DfcxIntent[]): DfcxIntent[] {
 /** 反論 Intent 群から hearing → objection_handling Page への transitionRoute を生成 */
 function buildObjectionTransitions(
   objectionIntents: DfcxIntent[],
-  _direction: "outbound" | "inbound",
+  direction: "outbound" | "inbound",
 ) {
+  // INBOUND_SUPPORT_BASELINE には objection_handling Page が無いため遷移を生成しない
+  if (direction === "inbound") return [];
   return objectionIntents.map((intent) => ({
     intent: intent.displayName,
     targetPage: "objection_handling",
