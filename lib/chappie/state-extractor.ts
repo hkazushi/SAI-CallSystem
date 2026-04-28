@@ -30,18 +30,18 @@ const hearingFieldSchema = z.object({
   label: z.string().describe("人向け表示名"),
   type: z.enum(["string", "number", "boolean", "enum"]),
   required: z.boolean(),
-  options: z.array(z.string()).optional(),
-  description: z.string().optional(),
+  options: z.array(z.string()).nullable(),
+  description: z.string().nullable(),
   // DFCX 用 optional 拡張: スロット埋めの エンティティ型 / reprompt戦略 / 最大再質問回数
   dfcxEntityType: dfcxEntityTypeSchema
-    .optional()
-    .describe("DFCX で使うエンティティ型 (label/key から推定可。明示するときだけ埋める)"),
+    .nullable()
+    .describe("DFCX で使うエンティティ型 (label/key から推定可。不明なら null)"),
   repromptStrategy: repromptStrategySchema
-    .optional()
-    .describe("DFCX no-match 時のトーン: gentle / assertive / offer_transfer"),
+    .nullable()
+    .describe("DFCX no-match 時のトーン: gentle / assertive / offer_transfer。不明なら null"),
   maxReprompts: z.number()
-    .optional()
-    .describe("DFCX reprompt の最大回数 (整数 1-5、default 3)"),
+    .nullable()
+    .describe("DFCX reprompt の最大回数 (整数 1-5、default 3)。不明なら null"),
 });
 
 const taskFlowSchema = z.object({
@@ -50,8 +50,8 @@ const taskFlowSchema = z.object({
   steps: z.array(z.string()),
   // DFCX 用 optional 拡張: trigger 発話のバリエーション (Intent.trainingPhrases)
   intentTrainingPhrases: z.array(z.string())
-    .optional()
-    .describe("DFCX 用: trigger と同義の発話バリエーション (3-5個推奨)"),
+    .nullable()
+    .describe("DFCX 用: trigger と同義の発話バリエーション (3-5個推奨)。不明なら null"),
 });
 
 const chappieOutputSchema = z.object({
@@ -70,8 +70,8 @@ const chappieOutputSchema = z.object({
     prohibitedBehaviors: z.array(z.string()),
     // DFCX 用 optional: エスカレーション専用 Intent の displayName
     escalationIntent: z.string()
-      .optional()
-      .describe("DFCX 用: エスカレーション専用 Intent の displayName (任意)"),
+      .nullable()
+      .describe("DFCX 用: エスカレーション専用 Intent の displayName。不明なら null"),
   }),
 });
 
@@ -132,7 +132,22 @@ export async function extractChappieOutput(
     messages: [{ role: "user", content: sections.join("\n\n---\n\n") }],
   });
 
-  return result.output;
+  return nullsToUndefined(result.output) as ChappieOutput;
+}
+
+// OpenAI strict schema は全フィールド required を要求するため schema 側を nullable にしている。
+// 下流型 (ChappieOutput) は optional (`?`) なので、ここで null を undefined に正規化する。
+function nullsToUndefined<T>(v: T): T {
+  if (v === null) return undefined as T;
+  if (Array.isArray(v)) return v.map((x) => nullsToUndefined(x)) as unknown as T;
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      out[k] = nullsToUndefined(val);
+    }
+    return out as T;
+  }
+  return v;
 }
 
 function buildTemplatePriorBlock(template: Template): string {
