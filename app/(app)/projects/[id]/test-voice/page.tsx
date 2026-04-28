@@ -38,6 +38,12 @@ function TestVoiceInner() {
   const callActiveRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // マイクの有効/無効切替（agent発話中はマイクを完全に切ってエコー回り込み防止）
+  const setMicEnabled = (enabled: boolean) => {
+    streamRef.current?.getAudioTracks().forEach((t) => { t.enabled = enabled; });
+  };
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
@@ -177,6 +183,8 @@ function TestVoiceInner() {
         if (callActiveRef.current) recordAndRespond();
         return;
       }
+      // 思考・発話中はマイクOFF
+      setMicEnabled(false);
       setStatus("thinking");
       const result = await callOrchestrator(blob);
       if (!result || !callActiveRef.current) return;
@@ -188,6 +196,7 @@ function TestVoiceInner() {
         await playAudio(result.audioUrl);
         await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
+      setMicEnabled(true);
       if (callActiveRef.current) recordAndRespond();
     };
 
@@ -260,6 +269,8 @@ function TestVoiceInner() {
       callActiveRef.current = true;
       setCallActive(true);
 
+      // agent発話前はマイクOFF
+      setMicEnabled(false);
       // 1. greet 発火
       setStatus("greeting");
       const greet = await callOrchestrator(null);
@@ -271,6 +282,8 @@ function TestVoiceInner() {
         await playAudio(greet.audioUrl);
         await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
+      // agent発話完了後マイクON
+      setMicEnabled(true);
       // 2. ループ開始
       if (callActiveRef.current) recordAndRespond();
     } catch (e) {
