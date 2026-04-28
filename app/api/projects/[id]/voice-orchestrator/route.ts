@@ -38,26 +38,44 @@ const TTS_VOICE = "ja-JP-Chirp3-HD-Aoede";
 export async function POST(req: Request, { params }: RouteContext) {
   const { id: projectId } = await params;
 
-  let formData: FormData;
-  try {
-    formData = await req.formData();
-  } catch {
-    return NextResponse.json(
-      { error: "expected multipart/form-data with 'audio' file" },
-      { status: 400 },
-    );
-  }
+  // greet モード: audio無しで welcome event を発火 → 第一声を取得
+  // multipart でない (Content-Type が application/json or 空) 場合は greet とみなす
+  const contentType = req.headers.get("content-type") ?? "";
+  const isGreet = !contentType.includes("multipart/form-data");
 
-  const audioFile = formData.get("audio");
-  const agentName = formData.get("agentName");
-  const sessionId = formData.get("sessionId");
-  const languageCode =
-    typeof formData.get("languageCode") === "string"
-      ? (formData.get("languageCode") as string)
-      : STT_LANGUAGE;
+  let formData: FormData | null = null;
+  let audioFile: FormDataEntryValue | null = null;
+  let agentName: FormDataEntryValue | null = null;
+  let sessionId: FormDataEntryValue | null = null;
+  let languageCode: string = STT_LANGUAGE;
 
-  if (!(audioFile instanceof Blob) || audioFile.size === 0) {
-    return NextResponse.json({ error: "audio file is required" }, { status: 400 });
+  if (isGreet) {
+    const body = (await req.json().catch(() => ({}))) as {
+      agentName?: string;
+      sessionId?: string;
+      languageCode?: string;
+    };
+    agentName = body.agentName ?? null;
+    sessionId = body.sessionId ?? null;
+    languageCode = body.languageCode ?? STT_LANGUAGE;
+  } else {
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "expected multipart/form-data with 'audio' file" },
+        { status: 400 },
+      );
+    }
+    audioFile = formData.get("audio");
+    agentName = formData.get("agentName");
+    sessionId = formData.get("sessionId");
+    if (typeof formData.get("languageCode") === "string") {
+      languageCode = formData.get("languageCode") as string;
+    }
+    if (!(audioFile instanceof Blob) || audioFile.size === 0) {
+      return NextResponse.json({ error: "audio file is required" }, { status: 400 });
+    }
   }
   if (typeof agentName !== "string" || !agentName.includes("/agents/")) {
     return NextResponse.json(
@@ -69,38 +87,43 @@ export async function POST(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
   }
 
-  const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
-  const audioBase64In = audioBuffer.toString("base64");
-
   const token = await getAccessToken();
   const gcpProjectId = getGcpProjectId();
   const dfcxLocation = getGcpLocation();
 
   try {
-    /* ---------- Step 1: Speech-to-Text v2 (Chirp_2) ---------- */
-    const transcript = await transcribe({
-      token,
-      gcpProjectId,
-      audioBase64: audioBase64In,
-      languageCode,
-    });
+    let transcript = "";
 
-    if (!transcript) {
-      return NextResponse.json({
-        ok: true,
-        transcript: "",
-        responseText: "",
-        audioBase64: null,
-        warning: "no_speech_detected",
+    if (!isGreet && audioFile instanceof Blob) {
+      /* ---------- Step 1: Speech-to-Text v2 (Chirp_2) ---------- */
+      const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
+      const audioBase64In = audioBuffer.toString("base64");
+      transcript = await transcribe({
+        token,
+        gcpProjectId,
+        audioBase64: audioBase64In,
+        languageCode,
       });
+
+      if (!transcript) {
+        return NextResponse.json({
+          ok: true,
+          transcript: "",
+          responseText: "",
+          audioBase64: null,
+          warning: "no_speech_detected",
+        });
+      }
     }
 
     /* ---------- Step 2: DFCX detectIntent ---------- */
+    // greet モードでは welcome event を送り、それ以外は transcript を送る
     const dfcxRes = await detectIntent({
       token,
-      agentName,
-      sessionId,
+      agentName: agentName as string,
+      sessionId: sessionId as string,
       text: transcript,
+      welcomeEvent: isGreet,
       languageCode,
       dfcxLocation,
     });
@@ -192,6 +215,7 @@ async function detectIntent(args: {
   agentName: string;
   sessionId: string;
   text: string;
+  welcomeEvent?: boolean;
   languageCode: string;
   dfcxLocation: string;
 }): Promise<DfcxDetectIntentResponse> {
@@ -203,6 +227,10 @@ async function detectIntent(args: {
       ? "https://dialogflow.googleapis.com/v3"
       : `https://${args.dfcxLocation}-dialogflow.googleapis.com/v3`;
   const url = `${apiBase}/${sessionResource}:detectIntent`;
+  // welcome event の場合は agent の greeting を発火させる
+  const queryInput = args.welcomeEvent
+    ? { event: { event: "WELCOME" }, languageCode: args.languageCode }
+    : { text: { text: args.text }, languageCode: args.languageCode };
   const resp = await fetch(url, {
     method: "POST",
     headers: {
@@ -210,12 +238,7 @@ async function detectIntent(args: {
       Authorization: `Bearer ${args.token}`,
       ...(quotaProject() ? { "X-Goog-User-Project": quotaProject()! } : {}),
     },
-    body: JSON.stringify({
-      queryInput: {
-        text: { text: args.text },
-        languageCode: args.languageCode,
-      },
-    }),
+    body: JSON.stringify({ queryInput }),
   });
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");

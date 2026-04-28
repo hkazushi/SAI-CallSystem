@@ -41,22 +41,31 @@ function TestVoiceInner() {
   }, []);
 
   const sendToOrchestrator = useCallback(
-    async (blob: Blob) => {
+    async (blob: Blob | null) => {
       if (!agentName) {
         setError("agentName が URL に指定されていません");
         return;
       }
       setThinking(true);
       try {
-        const fd = new FormData();
-        fd.append("audio", blob, "speech.webm");
-        fd.append("agentName", agentName);
-        fd.append("sessionId", sessionId);
-
-        const resp = await fetch(`/api/projects/${projectId}/voice-orchestrator`, {
-          method: "POST",
-          body: fd,
-        });
+        const isGreet = blob === null;
+        let resp: Response;
+        if (isGreet) {
+          resp = await fetch(`/api/projects/${projectId}/voice-orchestrator`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentName, sessionId, languageCode: "ja-JP" }),
+          });
+        } else {
+          const fd = new FormData();
+          fd.append("audio", blob, "speech.webm");
+          fd.append("agentName", agentName);
+          fd.append("sessionId", sessionId);
+          resp = await fetch(`/api/projects/${projectId}/voice-orchestrator`, {
+            method: "POST",
+            body: fd,
+          });
+        }
         const data = (await resp.json()) as {
           ok?: boolean;
           transcript?: string;
@@ -75,11 +84,6 @@ function TestVoiceInner() {
           return;
         }
 
-        const userTurn: Turn = {
-          id: safeUuid(),
-          role: "user",
-          text: data.transcript ?? "",
-        };
         const agentAudioUrl = data.audioBase64
           ? base64ToObjectUrl(data.audioBase64, "audio/mpeg")
           : undefined;
@@ -89,7 +93,17 @@ function TestVoiceInner() {
           text: data.responseText ?? "",
           audioUrl: agentAudioUrl,
         };
-        setTurns((prev) => [...prev, userTurn, agentTurn]);
+        if (isGreet) {
+          // greet モードは agent 発話のみ追加
+          setTurns((prev) => [...prev, agentTurn]);
+        } else {
+          const userTurn: Turn = {
+            id: safeUuid(),
+            role: "user",
+            text: data.transcript ?? "",
+          };
+          setTurns((prev) => [...prev, userTurn, agentTurn]);
+        }
 
         if (agentAudioUrl && audioElRef.current) {
           audioElRef.current.src = agentAudioUrl;
@@ -143,10 +157,20 @@ function TestVoiceInner() {
     setRecording(false);
   }, []);
 
+  // セッション開始時に agent から第一声を発話させる
+  const greetedSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || !agentName || !projectId) return;
+    if (greetedSessionRef.current === sessionId) return;
+    greetedSessionRef.current = sessionId;
+    sendToOrchestrator(null);
+  }, [sessionId, agentName, projectId, sendToOrchestrator]);
+
   const resetSession = useCallback(() => {
     setTurns([]);
     setSessionId(safeUuid());
     setError(null);
+    // greetedSessionRef は新 sessionId と異なるので useEffect が再発火する
   }, []);
 
   return (
