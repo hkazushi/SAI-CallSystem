@@ -126,7 +126,7 @@ export async function extractChappieOutput(
   );
 
   const result = await generateText({
-    model: openrouter("anthropic/claude-sonnet-4"),
+    model: openrouter("openai/gpt-4o-mini"),
     output: Output.object({ schema: chappieOutputSchema }),
     system: EXTRACTION_PROMPT,
     messages: [{ role: "user", content: sections.join("\n\n---\n\n") }],

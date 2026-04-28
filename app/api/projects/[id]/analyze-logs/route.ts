@@ -138,7 +138,7 @@ export async function POST(req: Request) {
   for (const [i, chunk] of chunks.entries()) {
     try {
       const result = await generateText({
-        model: openrouter("anthropic/claude-sonnet-4"),
+        model: openrouter("openai/gpt-4o-mini"),
         output: Output.object({ schema: chunkAnalysisSchema }),
         system: ANALYSIS_PROMPT,
         messages: [
