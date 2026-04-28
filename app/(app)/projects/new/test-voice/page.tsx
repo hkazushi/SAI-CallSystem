@@ -35,10 +35,36 @@ function TestVoiceInner() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // マイクの有効/無効切替（agent発話中はマイクを完全に切ってエコー回り込み防止）
-  const setMicEnabled = (enabled: boolean) => {
-    streamRef.current?.getAudioTracks().forEach((t) => { t.enabled = enabled; });
-  };
+  const releaseStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+    }
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+  }, []);
+
+  const acquireStream = useCallback(async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      streamRef.current = stream;
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "マイクの使用が許可されませんでした");
+      return false;
+    }
+  }, []);
+  const setMicEnabled = (_e: boolean) => { /* deprecated */ };
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -148,9 +174,9 @@ function TestVoiceInner() {
 
   const recordAndRespond = useCallback(async () => {
     if (!callActiveRef.current) return;
+    const ok = await acquireStream();
+    if (!ok || !callActiveRef.current) return;
     if (!streamRef.current || !analyserRef.current) return;
-    const flushBuf = new Float32Array(analyserRef.current.fftSize);
-    for (let i = 0; i < 5; i++) analyserRef.current.getFloatTimeDomainData(flushBuf);
 
     setStatus("listening");
     speechDetectedRef.current = false;
@@ -176,8 +202,8 @@ function TestVoiceInner() {
         if (callActiveRef.current) recordAndRespond();
         return;
       }
-      // 思考・発話中はマイクOFF（agent音声の回り込み防止）
-      setMicEnabled(false);
+      // マイクを完全 release してエコー回り込みを物理的に防ぐ
+      releaseStream();
       setStatus("thinking");
       const result = await callOrchestrator(blob);
       if (!result || !callActiveRef.current) return;
@@ -189,7 +215,6 @@ function TestVoiceInner() {
         await playAudio(result.audioUrl);
         await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
-      setMicEnabled(true);
       if (callActiveRef.current) recordAndRespond();
     };
 
@@ -235,28 +260,14 @@ function TestVoiceInner() {
     setError(null);
     setTurns([]);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      streamRef.current = stream;
+      // 初回マイク許可ダイアログを出すため一度プローブ
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((t) => t.stop());
       setPermission("granted");
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-      source.connect(analyser);
-      analyserRef.current = analyser;
 
       callActiveRef.current = true;
       setCallActive(true);
 
-      // agent発話前はマイクOFF（自分の声でgreetを邪魔されないため）
-      setMicEnabled(false);
       setStatus("greeting");
       const greet = await callOrchestrator(null);
       if (!greet || !callActiveRef.current) return;
@@ -267,8 +278,6 @@ function TestVoiceInner() {
         await playAudio(greet.audioUrl);
         await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
-      // agent発話完了後、マイクをONに
-      setMicEnabled(true);
       if (callActiveRef.current) recordAndRespond();
     } catch (e) {
       setPermission("denied");

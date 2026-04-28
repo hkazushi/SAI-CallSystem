@@ -1,12 +1,22 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { mockProjects, mockCallLogs } from "@/lib/mock-data";
-import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code } from "lucide-react";
+import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code, Mic } from "lucide-react";
+
+interface SavedProject {
+  id: string;
+  name: string;
+  dfcx_agent_id: string | null;
+  dfcx_agent_name: string | null;
+  dfcx_deploy_status: string | null;
+  template_id: string | null;
+}
 
 const statusConfig = {
   active:    { label: "稼働中", color: "text-emerald-400", bg: "bg-emerald-400/10" },
@@ -35,9 +45,39 @@ export default function ProjectDetailPage() {
   const status = statusConfig[project.status];
   const recentCalls = mockCallLogs.filter((c) => c.project_id === project.id).slice(0, 10);
 
+  // Supabase 保存済みプロジェクトをフェッチ (UUID なら）
+  const [savedProject, setSavedProject] = useState<SavedProject | null>(null);
+  useEffect(() => {
+    if (typeof id !== "string") return;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return;  // UUID 形式のみ
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(`/api/projects-store/${id}`);
+        const data = (await resp.json()) as { project?: SavedProject };
+        if (!cancelled && data.project) setSavedProject(data.project);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
-      <PageHeader title={project.name} description={project.description ?? undefined}>
+      <PageHeader title={savedProject?.name ?? project.name} description={project.description ?? undefined}>
+        {savedProject?.dfcx_agent_name && (
+          <>
+            <Link href={`/projects/${id}/test-voice?agentName=${encodeURIComponent(savedProject.dfcx_agent_name)}`}>
+              <Button size="sm" className="gradient-bg border-0 hover:opacity-90 h-8 text-xs gap-1.5">
+                <Mic className="w-3.5 h-3.5" />ブラウザで音声テスト
+              </Button>
+            </Link>
+            <Link href={`/projects/${id}/test?agentId=${encodeURIComponent(savedProject.dfcx_agent_id ?? "")}`}>
+              <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" />テキストでテスト
+              </Button>
+            </Link>
+          </>
+        )}
         <Link href={`/projects/${project.id}/schedule`}>
           <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
             <Calendar className="w-3.5 h-3.5 mr-1.5" />スケジュール

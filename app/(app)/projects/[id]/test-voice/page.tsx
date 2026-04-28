@@ -39,10 +39,42 @@ function TestVoiceInner() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // マイクの有効/無効切替（agent発話中はマイクを完全に切ってエコー回り込み防止）
-  const setMicEnabled = (enabled: boolean) => {
-    streamRef.current?.getAudioTracks().forEach((t) => { t.enabled = enabled; });
-  };
+  // 完全にマイクを停止 (毎ターン破棄してエコー回り込みをハードリセット)
+  const releaseStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+    }
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+  }, []);
+
+  // 新規にマイクを取得して analyser を構築
+  const acquireStream = useCallback(async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      streamRef.current = stream;
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "マイクの使用が許可されませんでした");
+      return false;
+    }
+  }, []);
+  const setMicEnabled = (_enabled: boolean) => { /* deprecated; replaced by release/acquire */ };
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -74,10 +106,10 @@ function TestVoiceInner() {
     mediaRecorderRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    if (audioCtxRef.current) {
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
       audioCtxRef.current.close().catch(() => {});
-      audioCtxRef.current = null;
     }
+    audioCtxRef.current = null;
     analyserRef.current = null;
     if (audioElRef.current) {
       audioElRef.current.pause();
@@ -155,10 +187,10 @@ function TestVoiceInner() {
 
   const recordAndRespond = useCallback(async () => {
     if (!callActiveRef.current) return;
+    // 毎ターン マイクを新規取得（前ターンの音声バッファを完全破棄）
+    const ok = await acquireStream();
+    if (!ok || !callActiveRef.current) return;
     if (!streamRef.current || !analyserRef.current) return;
-    // listening 開始前に入力バッファをフラッシュ（agent音声の残骸を捨てる）
-    const flushBuf = new Float32Array(analyserRef.current.fftSize);
-    for (let i = 0; i < 5; i++) analyserRef.current.getFloatTimeDomainData(flushBuf);
 
     setStatus("listening");
     speechDetectedRef.current = false;
@@ -186,8 +218,8 @@ function TestVoiceInner() {
         if (callActiveRef.current) recordAndRespond();
         return;
       }
-      // 思考・発話中はマイクOFF
-      setMicEnabled(false);
+      // 思考・発話中はマイクを完全 release してエコー回り込みを物理的に防ぐ
+      releaseStream();
       setStatus("thinking");
       const result = await callOrchestrator(blob);
       if (!result || !callActiveRef.current) return;
@@ -199,7 +231,6 @@ function TestVoiceInner() {
         await playAudio(result.audioUrl);
         await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
-      setMicEnabled(true);
       if (callActiveRef.current) recordAndRespond();
     };
 
@@ -251,30 +282,15 @@ function TestVoiceInner() {
     setError(null);
     setTurns([]);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      streamRef.current = stream;
-      setPermission("granted");
-      // AudioContext for VAD
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-      source.connect(analyser);
-      analyserRef.current = analyser;
+      // 初回マイク許可ダイアログを出すため一度取得してすぐ release
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((t) => t.stop());
 
       callActiveRef.current = true;
       setCallActive(true);
+      setPermission("granted");
 
-      // agent発話前はマイクOFF
-      setMicEnabled(false);
-      // 1. greet 発火
+      // 1. greet 発火 (この間マイクは取得しない)
       setStatus("greeting");
       const greet = await callOrchestrator(null);
       if (!greet || !callActiveRef.current) return;
@@ -285,9 +301,7 @@ function TestVoiceInner() {
         await playAudio(greet.audioUrl);
         await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
       }
-      // agent発話完了後マイクON
-      setMicEnabled(true);
-      // 2. ループ開始
+      // 2. ループ開始 (mic を取得してから)
       if (callActiveRef.current) recordAndRespond();
     } catch (e) {
       setPermission("denied");

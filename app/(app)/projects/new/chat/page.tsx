@@ -216,6 +216,11 @@ function ChappieChatInner() {
   const [input, setInput] = useState("");
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
   const [pendingTarget, setPendingTarget] = useState<"vapi" | "dfcx" | null>(null);
+  const [deployedOutput, setDeployedOutput] = useState<ChappieOutput | null>(null);
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
+  const [savingProject, setSavingProject] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const [deployState, setDeployState] = useState<
     | { kind: "idle" }
     | { kind: "extracting"; target: "vapi" | "dfcx" }
@@ -374,6 +379,8 @@ function ChappieChatInner() {
         agentName: result.agentName,
         trainOperationName: result.trainOperationName,
       });
+      // 抽出した output と DFCX 結果を保存用に保持
+      setDeployedOutput(output);
     } catch (err) {
       setDeployState({
         kind: "error",
@@ -570,14 +577,60 @@ function ChappieChatInner() {
                 <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
                   GCP Console の Conversational Agents で動作確認できます。Train ジョブが完了するまで数分かかる場合があります。
                 </p>
+                {!savedProjectId ? (
+                  <Button
+                    onClick={async () => {
+                      setSavingProject(true);
+                      setSaveError(null);
+                      try {
+                        const projectName = deployedOutput?.assistantName
+                          ? `${deployedOutput.assistantName} (${template?.displayName ?? "untitled"})`
+                          : (template?.displayName ?? "新規プロジェクト");
+                        const resp = await fetch("/api/projects-store", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            name: projectName,
+                            templateId: template?.id,
+                            chappieOutput: deployedOutput,
+                            dfcxAgentId: deployState.kind === "dfcx_success" ? deployState.agentId : undefined,
+                            dfcxAgentName: deployState.kind === "dfcx_success" ? deployState.agentName : undefined,
+                            dfcxTrainOperationId: deployState.kind === "dfcx_success" ? deployState.trainOperationName : undefined,
+                          }),
+                        });
+                        const data = (await resp.json()) as { project?: { id: string }; error?: string };
+                        if (!resp.ok || !data.project) throw new Error(data.error ?? `保存失敗 (${resp.status})`);
+                        setSavedProjectId(data.project.id);
+                      } catch (e) {
+                        setSaveError(e instanceof Error ? e.message : "保存失敗");
+                      } finally {
+                        setSavingProject(false);
+                      }
+                    }}
+                    disabled={savingProject}
+                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                  >
+                    {savingProject ? "保存中…" : "💾 プロジェクトとして保存"}
+                  </Button>
+                ) : (
+                  <a href={`/projects/${savedProjectId}/test-voice?agentName=${encodeURIComponent(deployState.agentName)}`} className="block">
+                    <Button className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5">
+                      ✅ 保存完了 → テスト会話へ
+                    </Button>
+                  </a>
+                )}
+                {saveError && (
+                  <p className="text-[10px] text-red-400 break-words">{saveError}</p>
+                )}
                 <a
                   href={`/projects/new/test-voice?agentName=${encodeURIComponent(deployState.agentName)}`}
                   className="block"
                 >
                   <Button
-                    className="w-full gradient-bg border-0 hover:opacity-85 h-9 text-[12px] font-semibold gap-1.5"
+                    variant="outline"
+                    className="w-full h-8 text-[11px] gap-1.5"
                   >
-                    🎤 ブラウザで音声テストする
+                    🎤 保存せず音声テスト
                   </Button>
                 </a>
                 <a
