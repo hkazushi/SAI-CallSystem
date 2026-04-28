@@ -26,6 +26,7 @@ function TestVoiceInner() {
   const [sessionId, setSessionId] = useState<string>("");
   const [callActive, setCallActive] = useState(false);
   const [status, setStatus] = useState<"idle" | "greeting" | "listening" | "thinking" | "speaking">("idle");
+  const [vadLevel, setVadLevel] = useState(0);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [permission, setPermission] = useState<"prompt" | "granted" | "denied">("prompt");
@@ -137,6 +138,8 @@ function TestVoiceInner() {
     });
   }, []);
 
+  const manualSendRef = useRef<(() => void) | null>(null);
+
   const recordAndRespond = useCallback(async () => {
     if (!callActiveRef.current) return;
     if (!streamRef.current || !analyserRef.current) return;
@@ -157,8 +160,10 @@ function TestVoiceInner() {
       if (recorder.state !== "inactive") {
         try { recorder.stop(); } catch { /* noop */ }
       }
+      await new Promise((r) => setTimeout(r, 100));
       const elapsed = Date.now() - recordingStartRef.current;
       const blob = new Blob(chunks, { type: mimeType });
+      console.log("[stopAndSend]", { elapsed, blobSize: blob.size, speechDetected: speechDetectedRef.current });
       if (!speechDetectedRef.current || elapsed < MIN_SPEECH_DURATION_MS || blob.size < 1000) {
         if (callActiveRef.current) recordAndRespond();
         return;
@@ -177,6 +182,11 @@ function TestVoiceInner() {
       if (callActiveRef.current) recordAndRespond();
     };
 
+    manualSendRef.current = () => {
+      speechDetectedRef.current = true;
+      stopAndSend();
+    };
+
     recorder.start();
 
     const buf = new Float32Array(analyserRef.current.fftSize);
@@ -191,6 +201,8 @@ function TestVoiceInner() {
       let sum = 0;
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
       const rms = Math.sqrt(sum / buf.length);
+      setVadLevel(Math.min(1, rms / 0.05));
+      if (Math.random() < 0.01) console.log("[VAD]", { rms: rms.toFixed(4), threshold: SILENCE_THRESHOLD, speechDetected: speechDetectedRef.current });
       if (rms > SILENCE_THRESHOLD) {
         speechDetectedRef.current = true;
         if (silenceTimerRef.current) {
@@ -363,10 +375,33 @@ function TestVoiceInner() {
             </Button>
           </div>
           {callActive && (
-            <p className="text-[11px] text-muted-foreground/70 inline-flex items-center gap-1.5">
-              {status === "thinking" || status === "greeting" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mic className="w-3 h-3" />}
-              {statusLabel[status]}
-            </p>
+            <div className="flex flex-col items-center gap-1.5">
+              <p className="text-[11px] text-muted-foreground/70 inline-flex items-center gap-1.5">
+                {status === "thinking" || status === "greeting" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mic className="w-3 h-3" />}
+                {statusLabel[status]}
+              </p>
+              {status === "listening" && (
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-400 transition-[width] duration-75"
+                        style={{ width: `${Math.round(vadLevel * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/60 font-mono">{(vadLevel * 100).toFixed(0)}%</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => manualSendRef.current?.()}
+                    className="h-7 text-[11px]"
+                  >
+                    手動で送信
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
