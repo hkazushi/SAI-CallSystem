@@ -4,6 +4,7 @@ import { useSearchParams, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PageTransition } from "@/components/ui/page-transition";
 import { Mic, MicOff, Loader2, Volume2, AlertCircle, RotateCcw } from "lucide-react";
+import { safeUuid, isSecureContextAvailable } from "@/lib/safe-uuid";
 
 type Turn = {
   id: string;
@@ -21,7 +22,7 @@ function TestVoiceInner() {
   const [sessionId, setSessionId] = useState<string>("");
 
   useEffect(() => {
-    setSessionId(crypto.randomUUID());
+    setSessionId(safeUuid());
   }, []);
   const [recording, setRecording] = useState(false);
   const [thinking, setThinking] = useState(false);
@@ -113,7 +114,7 @@ function TestVoiceInner() {
         }
 
         const userTurn: Turn = {
-          id: crypto.randomUUID(),
+          id: safeUuid(),
           role: "user",
           text: data.transcript ?? "",
         };
@@ -121,7 +122,7 @@ function TestVoiceInner() {
           ? base64ToObjectUrl(data.audioBase64, "audio/mpeg")
           : undefined;
         const agentTurn: Turn = {
-          id: crypto.randomUUID(),
+          id: safeUuid(),
           role: "agent",
           text: data.responseText ?? "",
           audioUrl: agentAudioUrl,
@@ -145,7 +146,7 @@ function TestVoiceInner() {
 
   const resetSession = useCallback(() => {
     setTurns([]);
-    setSessionId(crypto.randomUUID());
+    setSessionId(safeUuid());
     setError(null);
   }, []);
 
@@ -159,6 +160,17 @@ function TestVoiceInner() {
             <span className="font-mono break-all">{agentName || "agentName 未指定"}</span>
           </p>
         </header>
+
+        {!isSecureContextAvailable() && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-200">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>
+              現在のページは HTTPS ではないため、ブラウザのマイク（getUserMedia）が使えません。
+              ローカルで <span className="font-mono">http://localhost:3000</span> 経由でアクセスするか、
+              本番ドメインで HTTPS を有効化してください。
+            </span>
+          </div>
+        )}
 
         {error && (
           <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-200">
