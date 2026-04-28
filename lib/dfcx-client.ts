@@ -19,20 +19,21 @@ let cachedAuth: GoogleAuth | null = null;
 function getAuthClient(): GoogleAuth {
   if (cachedAuth) return cachedAuth;
   const json = process.env.GCP_SERVICE_ACCOUNT_JSON;
-  if (!json) {
-    throw new Error(
-      "GCP_SERVICE_ACCOUNT_JSON is not set. Set it in .env.local or Vercel environment variables.",
-    );
+  // SA JSON が設定されていればそれを優先、なければ ADC (gcloud auth application-default login) を使う
+  if (json && json.trim() !== "" && !json.startsWith("<")) {
+    let credentials: Record<string, unknown>;
+    try {
+      credentials = JSON.parse(json);
+    } catch (e) {
+      throw new Error(
+        `GCP_SERVICE_ACCOUNT_JSON is not valid JSON: ${e instanceof Error ? e.message : "unknown"}`,
+      );
+    }
+    cachedAuth = new GoogleAuth({ credentials, scopes: SCOPES });
+    return cachedAuth;
   }
-  let credentials: Record<string, unknown>;
-  try {
-    credentials = JSON.parse(json);
-  } catch (e) {
-    throw new Error(
-      `GCP_SERVICE_ACCOUNT_JSON is not valid JSON: ${e instanceof Error ? e.message : "unknown"}`,
-    );
-  }
-  cachedAuth = new GoogleAuth({ credentials, scopes: SCOPES });
+  // ADC モード
+  cachedAuth = new GoogleAuth({ scopes: SCOPES });
   return cachedAuth;
 }
 
