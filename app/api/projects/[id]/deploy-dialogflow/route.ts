@@ -45,6 +45,8 @@ interface DeployBody {
   template?: Template;
   tenantId?: string;
   direction?: "outbound" | "inbound";
+  // 既存 DFCX agent を置き換える場合に指定（成功時に旧 agent を DELETE）
+  replaceAgentName?: string;
 }
 
 export async function POST(req: Request, { params }: RouteContext) {
@@ -239,6 +241,21 @@ export async function POST(req: Request, { params }: RouteContext) {
       { method: "POST", body: JSON.stringify({}) },
       { location },
     );
+
+    // ---------- Step 9: 旧 agent を削除（再デプロイ時のみ）----------
+    if (body.replaceAgentName && body.replaceAgentName !== createdAgentName) {
+      try {
+        await dfcxFetch(
+          `/${body.replaceAgentName}`,
+          { method: "DELETE" },
+          { location },
+        );
+        console.log("[deploy-dialogflow] replaced old agent", body.replaceAgentName);
+      } catch (replaceErr) {
+        // 旧 agent の削除に失敗しても新 agent は使えるので警告のみ
+        console.warn("[deploy-dialogflow] failed to delete old agent", replaceErr);
+      }
+    }
 
     const result: DfcxDeployResult = {
       ok: true,

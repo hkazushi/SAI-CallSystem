@@ -13,18 +13,65 @@ type Turn = {
   audioUrl?: string;
 };
 
-// VAD (Voice Activity Detection) パラメータ
-const SILENCE_THRESHOLD = 0.013;        // RMS 閾値: これより小さいと「無音」
-const SILENCE_DURATION_MS = 900;        // 連続無音時間: これを超えたら発話終了とみなす
-const MIN_SPEECH_DURATION_MS = 400;     // 最低発話時間: これより短い録音は破棄
-const MAX_RECORDING_MS = 15000;         // 最大録音時間: 暴走防止
-const POST_PLAY_DELAY_MS = 800;         // agent 発話直後の待機（残響/エコー回避）
+// VAD (Voice Activity Detection) パラメータ デフォルト値
+const DEFAULT_SILENCE_THRESHOLD = 0.022;
+const SILENCE_DURATION_MS = 900;
+const MIN_SPEECH_DURATION_MS = 400;
+const MAX_RECORDING_MS = 15000;
+const DEFAULT_POST_PLAY_DELAY_MS = 1500;
+const VAD_WARMUP_MS = 450;
+const VAD_SETTINGS_KEY = "voice-vad-settings";
+
+// iOS Safari / Android Chrome でも動く MediaRecorder の mimeType 候補
+function pickMimeType(): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2", // iOS Safari 14.5+
+    "audio/mp4",
+    "audio/aac",
+    "audio/ogg;codecs=opus",
+  ];
+  if (typeof MediaRecorder === "undefined") return "audio/webm";
+  for (const m of candidates) {
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return "";
+}
+
+// 安全な AudioContext 取得（iOS Safari の webkitAudioContext 対応）
+function createAudioContext(): AudioContext {
+  const Ctor =
+    (typeof window !== "undefined" && (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext) ||
+    (typeof window !== "undefined" && (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+  if (!Ctor) throw new Error("AudioContext is not supported in this browser");
+  return new Ctor();
+}
 
 function TestVoiceInner() {
   const params = useParams<{ id: string }>();
   const projectId = params?.id ?? "new";
   const search = useSearchParams();
-  const agentName = search.get("agentName") ?? "";
+  const agentNameFromQuery = search.get("agentName") ?? "";
+  const [agentName, setAgentName] = useState<string>(agentNameFromQuery);
+  const [projectName, setProjectName] = useState<string>("");
+
+  // クエリに agentName が無く UUID 形式の projectId なら Supabase から取得
+  useEffect(() => {
+    if (agentNameFromQuery) { setAgentName(agentNameFromQuery); return; }
+    if (!/^[0-9a-f-]{36}$/i.test(projectId)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(`/api/projects-store/${projectId}`);
+        const data = (await resp.json()) as { project?: { dfcx_agent_name?: string | null; name?: string } };
+        if (cancelled) return;
+        if (data.project?.dfcx_agent_name) setAgentName(data.project.dfcx_agent_name);
+        if (data.project?.name) setProjectName(data.project.name);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId, agentNameFromQuery]);
 
   const [sessionId, setSessionId] = useState<string>("");
   const [callActive, setCallActive] = useState(false);  // 通話中
@@ -33,6 +80,30 @@ function TestVoiceInner() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [permission, setPermission] = useState<"prompt" | "granted" | "denied">("prompt");
+
+  // VAD 設定（環境差吸収用、localStorage 永続化）
+  const [silenceThreshold, setSilenceThreshold] = useState<number>(DEFAULT_SILENCE_THRESHOLD);
+  const [postPlayDelay, setPostPlayDelay] = useState<number>(DEFAULT_POST_PLAY_DELAY_MS);
+  const [showSettings, setShowSettings] = useState(false);
+  const silenceThresholdRef = useRef(DEFAULT_SILENCE_THRESHOLD);
+  const postPlayDelayRef = useRef(DEFAULT_POST_PLAY_DELAY_MS);
+  useEffect(() => { silenceThresholdRef.current = silenceThreshold; }, [silenceThreshold]);
+  useEffect(() => { postPlayDelayRef.current = postPlayDelay; }, [postPlayDelay]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(VAD_SETTINGS_KEY);
+      if (raw) {
+        const s = JSON.parse(raw) as { silenceThreshold?: number; postPlayDelay?: number };
+        if (typeof s.silenceThreshold === "number") setSilenceThreshold(s.silenceThreshold);
+        if (typeof s.postPlayDelay === "number") setPostPlayDelay(s.postPlayDelay);
+      }
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(VAD_SETTINGS_KEY, JSON.stringify({ silenceThreshold, postPlayDelay }));
+    } catch { /* ignore */ }
+  }, [silenceThreshold, postPlayDelay]);
 
   // refs (callback で常に最新を参照する)
   const callActiveRef = useRef(false);
@@ -57,11 +128,16 @@ function TestVoiceInner() {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          // AGC は静音時にゲインを上げてスピーカーブリードを拾うので無効化
+          autoGainControl: false,
         },
       });
       streamRef.current = stream;
-      const ctx = new AudioContext();
+      const ctx = createAudioContext();
+      // iOS Safari は AudioContext が suspended で開始されるため明示的に resume
+      if (ctx.state === "suspended") {
+        try { await ctx.resume(); } catch { /* noop */ }
+      }
       audioCtxRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
@@ -169,15 +245,23 @@ function TestVoiceInner() {
     [agentName, projectId],
   );
 
-  /** 音声を再生してから resolve */
+  /** 音声を再生してから resolve（再生終了後は src を完全クリアして残響源を断つ） */
   const playAudio = useCallback((url: string): Promise<void> => {
     return new Promise((resolve) => {
       const el = audioElRef.current;
       if (!el) { resolve(); return; }
+      const finish = () => {
+        try {
+          el.pause();
+          el.removeAttribute("src");
+          el.load();
+        } catch { /* noop */ }
+        resolve();
+      };
       el.src = url;
-      el.onended = () => resolve();
-      el.onerror = () => resolve();
-      el.play().catch(() => resolve());
+      el.onended = finish;
+      el.onerror = finish;
+      el.play().catch(finish);
     });
   }, []);
 
@@ -196,10 +280,12 @@ function TestVoiceInner() {
     speechDetectedRef.current = false;
     recordingStartRef.current = Date.now();
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm";
-    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+    const mimeType = pickMimeType();
+    if (typeof MediaRecorder === "undefined") {
+      setError("このブラウザは録音 (MediaRecorder) に対応していません。Chrome / Safari の最新版をお使いください。");
+      return;
+    }
+    const recorder = mimeType ? new MediaRecorder(streamRef.current, { mimeType }) : new MediaRecorder(streamRef.current);
     mediaRecorderRef.current = recorder;
     const chunks: Blob[] = [];
     recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
@@ -229,7 +315,7 @@ function TestVoiceInner() {
       if (result.audioUrl) {
         setStatus("speaking");
         await playAudio(result.audioUrl);
-        await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
+        await new Promise((r) => setTimeout(r, postPlayDelayRef.current));
       }
       if (callActiveRef.current) recordAndRespond();
     };
@@ -257,8 +343,13 @@ function TestVoiceInner() {
       const rms = Math.sqrt(sum / buf.length);
       setVadLevel(Math.min(1, rms / 0.05));
       // 100フレームに1回、RMSをログに出す（デバッグ用）
-      if (Math.random() < 0.01) console.log("[VAD]", { rms: rms.toFixed(4), threshold: SILENCE_THRESHOLD, speechDetected: speechDetectedRef.current });
-      if (rms > SILENCE_THRESHOLD) {
+      if (Math.random() < 0.01) console.log("[VAD]", { rms: rms.toFixed(4), threshold: silenceThresholdRef.current, speechDetected: speechDetectedRef.current, warmup: elapsed < VAD_WARMUP_MS });
+      // ★ warmup 中はマイクの過渡ノイズを無視（speechDetected を立てない）
+      if (elapsed < VAD_WARMUP_MS) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      if (rms > silenceThresholdRef.current) {
         // 発話中
         speechDetectedRef.current = true;
         if (silenceTimerRef.current) {
@@ -299,7 +390,7 @@ function TestVoiceInner() {
       if (greet.audioUrl) {
         setStatus("speaking");
         await playAudio(greet.audioUrl);
-        await new Promise((r) => setTimeout(r, POST_PLAY_DELAY_MS));
+        await new Promise((r) => setTimeout(r, postPlayDelayRef.current));
       }
       // 2. ループ開始 (mic を取得してから)
       if (callActiveRef.current) recordAndRespond();
@@ -329,10 +420,12 @@ function TestVoiceInner() {
     <PageTransition>
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-6">
         <header className="space-y-2">
-          <h1 className="text-xl font-semibold tracking-tight">音声テスト（Dialogflow CX）</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            音声テスト（Dialogflow CX）{projectName && <span className="text-muted-foreground/60 text-base ml-2">— {projectName}</span>}
+          </h1>
           <p className="text-[12px] text-muted-foreground/70">
             「通話開始」を押すと、エージェントから話しかけて連続会話できます。<br />
-            <span className="font-mono break-all">{agentName || "agentName 未指定"}</span>
+            <span className="font-mono break-all">{agentName || "agentName 取得中…（保存済みプロジェクトから復元）"}</span>
           </p>
         </header>
 
@@ -421,7 +514,66 @@ function TestVoiceInner() {
               <RotateCcw className="w-3 h-3" />
               セッションをリセット
             </Button>
+            <Button
+              onClick={() => setShowSettings((v) => !v)}
+              variant="ghost"
+              className="h-10 text-[11px] gap-1.5 text-muted-foreground/70"
+            >
+              ⚙ {showSettings ? "閉じる" : "音声設定"}
+            </Button>
           </div>
+          {showSettings && (
+            <div className="w-full max-w-md mx-auto rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+              <p className="text-[11px] font-medium text-foreground/80">音声検知パラメータ（環境差調整）</p>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] text-muted-foreground/70">無音閾値 (SILENCE_THRESHOLD)</label>
+                  <span className="text-[11px] font-mono">{silenceThreshold.toFixed(3)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0.005}
+                  max={0.06}
+                  step={0.001}
+                  value={silenceThreshold}
+                  onChange={(e) => setSilenceThreshold(Number(e.target.value))}
+                  className="w-full"
+                />
+                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                  高すぎる→発話を取り逃す、低すぎる→エコーを拾う
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] text-muted-foreground/70">発話後待機 (POST_PLAY_DELAY)</label>
+                  <span className="text-[11px] font-mono">{postPlayDelay} ms</span>
+                </div>
+                <input
+                  type="range"
+                  min={300}
+                  max={3000}
+                  step={100}
+                  value={postPlayDelay}
+                  onChange={(e) => setPostPlayDelay(Number(e.target.value))}
+                  className="w-full"
+                />
+                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                  長くする→エコー抑止、短くする→応答が機敏に
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setSilenceThreshold(DEFAULT_SILENCE_THRESHOLD);
+                  setPostPlayDelay(DEFAULT_POST_PLAY_DELAY_MS);
+                }}
+                size="sm"
+                variant="outline"
+                className="text-[11px] h-7"
+              >
+                デフォルトに戻す
+              </Button>
+            </div>
+          )}
           {callActive && (
             <div className="flex flex-col items-center gap-1">
               <p className="text-[11px] text-muted-foreground/70 inline-flex items-center gap-1.5">

@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     name?: string;
     templateId?: string;
     chappieOutput?: unknown;
+    chatMessages?: unknown;
     dfcxAgentId?: string;
     dfcxAgentName?: string;
     dfcxFlowId?: string;
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
       name: body.name,
       template_id: body.templateId ?? null,
       chappie_output: body.chappieOutput ?? null,
+      chat_messages: body.chatMessages ?? null,
       dfcx_agent_id: body.dfcxAgentId ?? null,
       dfcx_agent_name: body.dfcxAgentName ?? null,
       dfcx_flow_id: body.dfcxFlowId ?? null,

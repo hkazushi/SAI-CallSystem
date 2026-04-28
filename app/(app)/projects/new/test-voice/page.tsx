@@ -13,11 +13,33 @@ type Turn = {
   audioUrl?: string;
 };
 
-const SILENCE_THRESHOLD = 0.013;
+const SILENCE_THRESHOLD = 0.022;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_DURATION_MS = 400;
 const MAX_RECORDING_MS = 15000;
-const POST_PLAY_DELAY_MS = 800;
+const POST_PLAY_DELAY_MS = 1500;
+const VAD_WARMUP_MS = 450;
+
+function pickMimeType(): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/aac",
+    "audio/ogg;codecs=opus",
+  ];
+  if (typeof MediaRecorder === "undefined") return "audio/webm";
+  for (const m of candidates) if (MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+function createAudioContext(): AudioContext {
+  const Ctor =
+    (typeof window !== "undefined" && (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext) ||
+    (typeof window !== "undefined" && (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+  if (!Ctor) throw new Error("AudioContext is not supported");
+  return new Ctor();
+}
 
 function TestVoiceInner() {
   const search = useSearchParams();
@@ -48,10 +70,13 @@ function TestVoiceInner() {
   const acquireStream = useCallback(async (): Promise<boolean> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
       });
       streamRef.current = stream;
-      const ctx = new AudioContext();
+      const ctx = createAudioContext();
+      if (ctx.state === "suspended") {
+        try { await ctx.resume(); } catch { /* noop */ }
+      }
       audioCtxRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
@@ -163,10 +188,14 @@ function TestVoiceInner() {
     return new Promise((resolve) => {
       const el = audioElRef.current;
       if (!el) { resolve(); return; }
+      const finish = () => {
+        try { el.pause(); el.removeAttribute("src"); el.load(); } catch { /* noop */ }
+        resolve();
+      };
       el.src = url;
-      el.onended = () => resolve();
-      el.onerror = () => resolve();
-      el.play().catch(() => resolve());
+      el.onended = finish;
+      el.onerror = finish;
+      el.play().catch(finish);
     });
   }, []);
 
@@ -182,10 +211,12 @@ function TestVoiceInner() {
     speechDetectedRef.current = false;
     recordingStartRef.current = Date.now();
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm";
-    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+    const mimeType = pickMimeType();
+    if (typeof MediaRecorder === "undefined") {
+      setError("このブラウザは録音に対応していません。Chrome / Safari の最新版をお使いください。");
+      return;
+    }
+    const recorder = mimeType ? new MediaRecorder(streamRef.current, { mimeType }) : new MediaRecorder(streamRef.current);
     mediaRecorderRef.current = recorder;
     const chunks: Blob[] = [];
     recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
@@ -238,7 +269,11 @@ function TestVoiceInner() {
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
       const rms = Math.sqrt(sum / buf.length);
       setVadLevel(Math.min(1, rms / 0.05));
-      if (Math.random() < 0.01) console.log("[VAD]", { rms: rms.toFixed(4), threshold: SILENCE_THRESHOLD, speechDetected: speechDetectedRef.current });
+      if (Math.random() < 0.01) console.log("[VAD]", { rms: rms.toFixed(4), threshold: SILENCE_THRESHOLD, speechDetected: speechDetectedRef.current, warmup: elapsed < VAD_WARMUP_MS });
+      if (elapsed < VAD_WARMUP_MS) {
+        requestAnimationFrame(tick);
+        return;
+      }
       if (rms > SILENCE_THRESHOLD) {
         speechDetectedRef.current = true;
         if (silenceTimerRef.current) {

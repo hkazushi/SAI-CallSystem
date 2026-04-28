@@ -28,6 +28,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   if ("name" in body) patch.name = body.name;
   if ("templateId" in body) patch.template_id = body.templateId;
   if ("chappieOutput" in body) patch.chappie_output = body.chappieOutput;
+  if ("chatMessages" in body) patch.chat_messages = body.chatMessages;
   if ("dfcxAgentId" in body) patch.dfcx_agent_id = body.dfcxAgentId;
   if ("dfcxAgentName" in body) patch.dfcx_agent_name = body.dfcxAgentName;
   if ("dfcxFlowId" in body) patch.dfcx_flow_id = body.dfcxFlowId;

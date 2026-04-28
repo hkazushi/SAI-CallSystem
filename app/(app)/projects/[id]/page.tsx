@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { mockProjects, mockCallLogs } from "@/lib/mock-data";
-import { Play, Pause, Settings, GitBranch, FileText, Calendar, Phone, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code, Mic } from "lucide-react";
+import { Play, Pause, GitBranch, FileText, Calendar, Bot, Zap, PhoneIncoming, PhoneOutgoing, Wand2, MessageSquare, Code, Mic } from "lucide-react";
 
 interface SavedProject {
   id: string;
@@ -15,7 +15,10 @@ interface SavedProject {
   dfcx_agent_id: string | null;
   dfcx_agent_name: string | null;
   dfcx_deploy_status: string | null;
+  dfcx_deployed_at: string | null;
   template_id: string | null;
+  chappie_output: unknown;
+  created_at: string;
 }
 
 const statusConfig = {
@@ -41,37 +44,59 @@ function formatDate(iso: string) {
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const project = mockProjects.find((p) => p.id === id) ?? mockProjects[0];
-  const status = statusConfig[project.status];
-  const recentCalls = mockCallLogs.filter((c) => c.project_id === project.id).slice(0, 10);
+  const idStr = typeof id === "string" ? id : "";
+  const isSavedId = /^[0-9a-f-]{36}$/i.test(idStr);
 
-  // Supabase 保存済みプロジェクトをフェッチ (UUID なら）
   const [savedProject, setSavedProject] = useState<SavedProject | null>(null);
+  const [savedLoading, setSavedLoading] = useState<boolean>(isSavedId);
   useEffect(() => {
-    if (typeof id !== "string") return;
-    if (!/^[0-9a-f-]{36}$/i.test(id)) return;  // UUID 形式のみ
+    if (!isSavedId) return;
     let cancelled = false;
     (async () => {
       try {
-        const resp = await fetch(`/api/projects-store/${id}`);
+        const resp = await fetch(`/api/projects-store/${idStr}`);
         const data = (await resp.json()) as { project?: SavedProject };
-        if (!cancelled && data.project) setSavedProject(data.project);
-      } catch { /* ignore */ }
+        if (!cancelled) {
+          if (data.project) setSavedProject(data.project);
+          setSavedLoading(false);
+        }
+      } catch {
+        if (!cancelled) setSavedLoading(false);
+      }
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [idStr, isSavedId]);
+
+  // 保存済みプロジェクトの場合は mockData を一切使わない（誤情報の表示を防ぐ）
+  const isSaved = !!savedProject;
+  const project = !isSaved
+    ? (mockProjects.find((p) => p.id === id) ?? mockProjects[0])
+    : null;
+  if (isSavedId && savedLoading) {
+    return <div className="p-8 text-sm text-muted-foreground/60">プロジェクトを読み込み中…</div>;
+  }
+
+  // 保存済み (Supabase) プロジェクト専用ビュー
+  if (savedProject) {
+    return <SavedProjectView project={savedProject} />;
+  }
+  if (!project) {
+    return <div className="p-8 text-sm text-muted-foreground/60">プロジェクトが見つかりません</div>;
+  }
+  const status = statusConfig[project.status];
+  const recentCalls = mockCallLogs.filter((c) => c.project_id === project.id).slice(0, 10);
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
-      <PageHeader title={savedProject?.name ?? project.name} description={project.description ?? undefined}>
-        {savedProject?.dfcx_agent_name && (
+      <PageHeader title={project.name} description={project.description ?? undefined}>
+        {false && (
           <>
-            <Link href={`/projects/${id}/test-voice?agentName=${encodeURIComponent(savedProject.dfcx_agent_name)}`}>
+            <Link href={`/projects/${id}/test-voice`}>
               <Button size="sm" className="gradient-bg border-0 hover:opacity-90 h-8 text-xs gap-1.5">
                 <Mic className="w-3.5 h-3.5" />ブラウザで音声テスト
               </Button>
             </Link>
-            <Link href={`/projects/${id}/test?agentId=${encodeURIComponent(savedProject.dfcx_agent_id ?? "")}`}>
+            <Link href={`/projects/${id}/test`}>
               <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs gap-1.5">
                 <MessageSquare className="w-3.5 h-3.5" />テキストでテスト
               </Button>
@@ -299,6 +324,255 @@ export default function ProjectDetailPage() {
             </table>
           </div>
         </Card>
+      )}
+    </div>
+  );
+}
+
+// 保存済み (Supabase) プロジェクトの詳細ビュー
+// mockData を使わず、実際の DFCX agent と ChappieOutput の情報のみで構成
+function SavedProjectView({ project }: { project: SavedProject }) {
+  type ChappieOut = {
+    industry?: string;
+    assistantName?: string;
+    firstMessage?: string;
+    persona?: { tone?: string; language?: string; doNots?: string[] };
+    tasks?: { name: string; trigger?: string; steps?: string[] }[];
+    hearingFields?: { name: string; required?: boolean }[];
+    guardrails?: { transferConditions?: string[]; prohibitedBehaviors?: string[] };
+  };
+  const chappie = (project.chappie_output as ChappieOut | null) ?? {};
+  const ready = project.dfcx_deploy_status === "ready" || !!project.dfcx_agent_name;
+  const statusInfo = ready
+    ? { label: "稼働中", color: "text-emerald-400", bg: "bg-emerald-400/10" }
+    : project.dfcx_deploy_status === "training"
+      ? { label: "学習中", color: "text-amber-400", bg: "bg-amber-400/10" }
+      : { label: "下書き", color: "text-muted-foreground", bg: "bg-white/5" };
+  const agentName = project.dfcx_agent_name ?? "";
+  const agentId = project.dfcx_agent_id ?? "";
+
+  return (
+    <div className="p-6 space-y-6 max-w-[1400px]">
+      <PageHeader title={project.name} description={chappie.industry ? `業種: ${chappie.industry}` : "Dialogflow CX 接続済みプロジェクト"}>
+        {agentName && (
+          <Link href={`/projects/${project.id}/test-voice?agentName=${encodeURIComponent(agentName)}`}>
+            <Button size="sm" className="gradient-bg border-0 hover:opacity-90 h-8 text-xs gap-1.5">
+              <Mic className="w-3.5 h-3.5" />ブラウザで音声テスト
+            </Button>
+          </Link>
+        )}
+        {agentName && (
+          <Link href={`/projects/${project.id}/test?agentName=${encodeURIComponent(agentName)}`}>
+            <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5" />テキストでテスト
+            </Button>
+          </Link>
+        )}
+        <Link href={`/projects/new/chat?engine=dialogflow_cx&savedId=${project.id}`}>
+          <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+            <MessageSquare className="w-3.5 h-3.5 mr-1.5" />壁打ち再開
+          </Button>
+        </Link>
+        <Link href={`/projects/${project.id}/flow`}>
+          <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+            <GitBranch className="w-3.5 h-3.5 mr-1.5" />フロー編集
+          </Button>
+        </Link>
+        {agentName && (
+          <a href={`https://dialogflow.cloud.google.com/cx/${agentName}`} target="_blank" rel="noreferrer">
+            <Button variant="outline" size="sm" className="border-border/40 h-8 text-xs">
+              GCP Console で開く
+            </Button>
+          </a>
+        )}
+      </PageHeader>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4 border-border/40 bg-card/60">
+          <p className="text-xs text-muted-foreground">ステータス</p>
+          <div className={`inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-lg ${statusInfo.bg}`}>
+            <div className="w-1.5 h-1.5 rounded-full bg-current" />
+            <span className={`text-sm font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
+          </div>
+        </Card>
+        <Card className="p-4 border-border/40 bg-card/60">
+          <p className="text-xs text-muted-foreground">アシスタント名</p>
+          <p className="text-sm font-medium mt-2 truncate">{chappie.assistantName ?? "—"}</p>
+        </Card>
+        <Card className="p-4 border-border/40 bg-card/60">
+          <p className="text-xs text-muted-foreground">AIプロバイダー</p>
+          <div className="flex items-center gap-1.5 mt-2">
+            <Bot className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-medium">Dialogflow CX</span>
+          </div>
+        </Card>
+        <Card className="p-4 border-border/40 bg-card/60">
+          <p className="text-xs text-muted-foreground">作成日</p>
+          <p className="text-sm font-medium mt-2">{new Date(project.created_at).toLocaleString("ja-JP")}</p>
+        </Card>
+      </div>
+
+      <Card className="p-5 border-border/40 bg-card/60">
+        <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+          <Bot className="w-4 h-4 text-blue-400" /> Dialogflow CX 接続情報
+        </h3>
+        <div className="grid md:grid-cols-2 gap-4 text-xs">
+          <div>
+            <p className="text-muted-foreground">agentId</p>
+            <p className="font-mono mt-1 break-all">{agentId || "—"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">agentName</p>
+            <p className="font-mono mt-1 break-all">{agentName || "—"}</p>
+          </div>
+          {project.dfcx_deployed_at && (
+            <div>
+              <p className="text-muted-foreground">デプロイ日時</p>
+              <p className="mt-1">{new Date(project.dfcx_deployed_at).toLocaleString("ja-JP")}</p>
+            </div>
+          )}
+          {project.template_id && (
+            <div>
+              <p className="text-muted-foreground">テンプレート</p>
+              <p className="mt-1">{project.template_id}</p>
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground/60 mt-3 leading-relaxed">
+          ブラウザ音声テスト・テキストテスト・実コール（Twilio 連携時）はすべてこの DFCX agent に接続されます。
+        </p>
+      </Card>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {(chappie.persona || chappie.firstMessage) && (
+          <Card className="p-5 border-border/40 bg-card/60">
+            <h3 className="font-semibold text-sm mb-4">ペルソナ・冒頭メッセージ</h3>
+            <div className="space-y-3 text-sm">
+              {chappie.persona?.tone && (
+                <div>
+                  <p className="text-xs text-muted-foreground">トーン</p>
+                  <p className="mt-0.5">{chappie.persona.tone}</p>
+                </div>
+              )}
+              {chappie.persona?.language && (
+                <div>
+                  <p className="text-xs text-muted-foreground">言語</p>
+                  <p className="mt-0.5">{chappie.persona.language === "ja" ? "日本語" : chappie.persona.language}</p>
+                </div>
+              )}
+              {chappie.persona?.doNots?.length ? (
+                <div>
+                  <p className="text-xs text-muted-foreground">禁止事項</p>
+                  <ul className="mt-1.5 space-y-1">
+                    {chappie.persona.doNots.map((d) => (
+                      <li key={d} className="flex items-start gap-1.5 text-xs">
+                        <div className="w-1 h-1 rounded-full bg-red-400 mt-1.5" />{d}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {chappie.firstMessage && (
+                <div className="pt-2 border-t border-border/20">
+                  <p className="text-xs text-muted-foreground mb-1.5">冒頭メッセージ</p>
+                  <p className="text-xs leading-relaxed bg-white/3 rounded-lg p-3 border border-border/20">
+                    {chappie.firstMessage}
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {chappie.tasks && chappie.tasks.length > 0 && (
+          <Card className="p-5 border-border/40 bg-card/60">
+            <h3 className="font-semibold text-sm mb-4">タスクフロー ({chappie.tasks.length})</h3>
+            <div className="space-y-2.5">
+              {chappie.tasks.slice(0, 6).map((t, i) => (
+                <div key={i} className="text-xs border-l-2 border-primary/30 pl-3 py-1">
+                  <p className="font-medium text-foreground/90">{t.name}</p>
+                  {t.trigger && <p className="text-muted-foreground/70 mt-0.5">条件: {t.trigger}</p>}
+                  {t.steps && t.steps.length > 0 && (
+                    <p className="text-muted-foreground/60 mt-0.5">{t.steps.length} ステップ</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        <Card className="p-5 border-border/40 bg-card/60">
+          <h3 className="font-semibold text-sm mb-4">設定メニュー</h3>
+          <div className="space-y-2">
+            {[
+              { href: `/projects/${project.id}/test-voice${agentName ? `?agentName=${encodeURIComponent(agentName)}` : ""}`, icon: Mic, label: "ブラウザ音声テスト", desc: "DFCX agent に直接接続して通話" },
+              { href: `/projects/${project.id}/test${agentName ? `?agentName=${encodeURIComponent(agentName)}` : ""}`, icon: MessageSquare, label: "テキストテスト", desc: "STT/TTS をバイパスしてフロー検証" },
+              { href: `/projects/new/chat?engine=dialogflow_cx&savedId=${project.id}`, icon: MessageSquare, label: "壁打ち再開", desc: "編集して再デプロイ可能" },
+              { href: `/projects/${project.id}/flow`, icon: GitBranch, label: "トークフロー編集", desc: "DFCX 会話フローを編集" },
+              { href: `/projects/${project.id}/schedule`, icon: Calendar, label: "スケジュール設定", desc: "発信日時・リスト設定（Twilio 連携時）" },
+            ].map(({ href, icon: Icon, label, desc }) => (
+              <Link key={href} href={href}>
+                <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer border border-transparent hover:border-border/20">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {(chappie.guardrails?.transferConditions?.length || chappie.guardrails?.prohibitedBehaviors?.length || chappie.hearingFields?.length) && (
+        <div className="grid md:grid-cols-2 gap-6">
+          {chappie.hearingFields && chappie.hearingFields.length > 0 && (
+            <Card className="p-5 border-border/40 bg-card/60">
+              <h3 className="font-semibold text-sm mb-3">ヒアリング項目 ({chappie.hearingFields.length})</h3>
+              <ul className="space-y-1.5 text-xs">
+                {chappie.hearingFields.map((h, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full ${h.required ? "bg-amber-400" : "bg-white/30"}`} />
+                    <span>{h.name}</span>
+                    {h.required && <span className="text-[10px] text-amber-400/80">必須</span>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          {(chappie.guardrails?.transferConditions?.length || chappie.guardrails?.prohibitedBehaviors?.length) && (
+            <Card className="p-5 border-border/40 bg-card/60">
+              <h3 className="font-semibold text-sm mb-3">ガードレール</h3>
+              {chappie.guardrails?.transferConditions?.length ? (
+                <div className="mb-3">
+                  <p className="text-xs text-muted-foreground mb-1.5">人間転送条件</p>
+                  <ul className="space-y-1 text-xs">
+                    {chappie.guardrails.transferConditions.map((c, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5" />{c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {chappie.guardrails?.prohibitedBehaviors?.length ? (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">禁止行為</p>
+                  <ul className="space-y-1 text-xs">
+                    {chappie.guardrails.prohibitedBehaviors.map((c, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <div className="w-1 h-1 rounded-full bg-red-400 mt-1.5" />{c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </Card>
+          )}
+        </div>
       )}
     </div>
   );

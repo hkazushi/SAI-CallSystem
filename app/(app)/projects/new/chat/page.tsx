@@ -114,7 +114,11 @@ function ChappieChatInner() {
   const engineParam = searchParams.get("engine");
   const engine: ChappieEngine =
     engineParam === "dialogflow_cx" || engineParam === "both" ? engineParam : "vapi";
-  const templateId = searchParams.get("template");
+  const savedIdQuery = searchParams.get("savedId");
+  const [resumedTemplateId, setResumedTemplateId] = useState<string | null>(null);
+  const [resumedAgentName, setResumedAgentName] = useState<string | null>(null);
+  const templateIdRaw = searchParams.get("template");
+  const templateId = templateIdRaw ?? resumedTemplateId;
   const template = templateId ? getTemplate(templateId) : undefined;
 
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
@@ -165,7 +169,35 @@ function ChappieChatInner() {
 
   const [storageHydrated, setStorageHydrated] = useState(false);
 
+  // savedId が指定されたら Supabase から chat_messages / template_id / dfcx_agent_name を復元
   useEffect(() => {
+    if (!savedIdQuery) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(`/api/projects-store/${savedIdQuery}`);
+        const data = (await resp.json()) as {
+          project?: {
+            template_id?: string | null;
+            chat_messages?: ChappieUIMessage[] | null;
+            dfcx_agent_name?: string | null;
+          };
+        };
+        if (cancelled) return;
+        if (data.project?.template_id) setResumedTemplateId(data.project.template_id);
+        if (data.project?.dfcx_agent_name) setResumedAgentName(data.project.dfcx_agent_name);
+        if (Array.isArray(data.project?.chat_messages) && data.project.chat_messages.length > 1) {
+          setMessages(data.project.chat_messages);
+        }
+      } catch { /* ignore */ } finally {
+        if (!cancelled) setStorageHydrated(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [savedIdQuery, setMessages]);
+
+  useEffect(() => {
+    if (savedIdQuery) return;  // savedId モードでは Supabase 由来を優先
     try {
       const saved = window.localStorage.getItem(storageKey);
       if (saved) {
@@ -179,17 +211,33 @@ function ChappieChatInner() {
     } finally {
       setStorageHydrated(true);
     }
-  }, [storageKey, setMessages]);
+  }, [storageKey, setMessages, savedIdQuery]);
+
+  // savedId モードでは Supabase に PATCH で永続化（debounce）
+  useEffect(() => {
+    if (!storageHydrated) return;
+    if (!savedIdQuery) return;
+    if (messages.length <= 1) return;
+    const t = setTimeout(() => {
+      fetch(`/api/projects-store/${savedIdQuery}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatMessages: messages }),
+      }).catch(() => { /* ignore */ });
+    }, 800);
+    return () => clearTimeout(t);
+  }, [messages, savedIdQuery, storageHydrated]);
 
   useEffect(() => {
     if (!storageHydrated) return;
+    if (savedIdQuery) return;
     if (messages.length <= 1) return;
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(messages));
     } catch {
       // quota exceeded or storage disabled — silently skip
     }
-  }, [messages, storageKey, storageHydrated]);
+  }, [messages, storageKey, storageHydrated, savedIdQuery]);
 
   function handleResetConversation() {
     if (typeof window === "undefined") return;
@@ -349,7 +397,7 @@ function ChappieChatInner() {
       const output = await extractOutput();
 
       setDeployState({ kind: "deploying", target: "dfcx" });
-      const projectId = `new-${Date.now()}`;
+      const projectId = savedIdQuery ?? `new-${Date.now()}`;
       const deployRes = await fetch(`/api/projects/${projectId}/deploy-dialogflow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -357,6 +405,8 @@ function ChappieChatInner() {
           output,
           template,
           tenantId: projectId,
+          // 再デプロイ: 既存 agent があれば置換
+          replaceAgentName: resumedAgentName ?? undefined,
         }),
       });
       if (!deployRes.ok) {
@@ -381,6 +431,26 @@ function ChappieChatInner() {
       });
       // 抽出した output と DFCX 結果を保存用に保持
       setDeployedOutput(output);
+
+      // savedId モード（再デプロイ）の場合は Supabase の dfcx_* と chappie_output を即時更新
+      if (savedIdQuery) {
+        try {
+          await fetch(`/api/projects-store/${savedIdQuery}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chappieOutput: output,
+              chatMessages: messages,
+              dfcxAgentId: result.agentId,
+              dfcxAgentName: result.agentName,
+              dfcxTrainOperationId: result.trainOperationName,
+              dfcxDeployStatus: "ready",
+            }),
+          });
+          setSavedProjectId(savedIdQuery);
+          setResumedAgentName(result.agentName);
+        } catch { /* ignore */ }
+      }
     } catch (err) {
       setDeployState({
         kind: "error",
@@ -593,6 +663,7 @@ function ChappieChatInner() {
                             name: projectName,
                             templateId: template?.id,
                             chappieOutput: deployedOutput,
+                            chatMessages: messages,
                             dfcxAgentId: deployState.kind === "dfcx_success" ? deployState.agentId : undefined,
                             dfcxAgentName: deployState.kind === "dfcx_success" ? deployState.agentName : undefined,
                             dfcxTrainOperationId: deployState.kind === "dfcx_success" ? deployState.trainOperationName : undefined,
@@ -692,10 +763,15 @@ function ChappieChatInner() {
                     ) : (
                       <>
                         <Bot className="w-3 h-3" />
-                        Dialogflow CX にデプロイ
+                        {resumedAgentName ? "Dialogflow CX に再デプロイ" : "Dialogflow CX にデプロイ"}
                       </>
                     )}
                   </Button>
+                )}
+                {savedIdQuery && resumedAgentName && (
+                  <p className="text-[10px] text-blue-300/70 leading-relaxed">
+                    ※ 既存 agent <span className="font-mono break-all">{resumedAgentName.split("/").pop()}</span> を置換します。
+                  </p>
                 )}
                 {!reachedReview && !isDeploying && (
                   <p className="text-[10px] text-amber-300/70 leading-relaxed">
