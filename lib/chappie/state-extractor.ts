@@ -5,7 +5,9 @@
  * モデルは @ai-sdk/anthropic 直叩きで claude-sonnet-4-6 を呼ぶ。抽出は境界が明確なので Opus 相当は不要。
  */
 import { generateText, Output } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 import { z } from "zod";
 import type { ChappieOutput } from "../vapi-compiler/types";
 import type { Template } from "@/lib/templates/types";
@@ -124,7 +126,7 @@ export async function extractChappieOutput(
   );
 
   const result = await generateText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: openrouter("anthropic/claude-sonnet-4"),
     output: Output.object({ schema: chappieOutputSchema }),
     system: EXTRACTION_PROMPT,
     messages: [{ role: "user", content: sections.join("\n\n---\n\n") }],

@@ -18,7 +18,9 @@
  * モデル: claude-sonnet-4-6 (state-extractor と同パターン)
  */
 import { generateText, Output } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+
+const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTemplate } from "@/lib/templates";
@@ -136,7 +138,7 @@ export async function POST(req: Request) {
   for (const [i, chunk] of chunks.entries()) {
     try {
       const result = await generateText({
-        model: anthropic("claude-sonnet-4-6"),
+        model: openrouter("anthropic/claude-sonnet-4"),
         output: Output.object({ schema: chunkAnalysisSchema }),
         system: ANALYSIS_PROMPT,
         messages: [
