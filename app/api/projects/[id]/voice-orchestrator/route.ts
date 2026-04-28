@@ -227,9 +227,10 @@ async function detectIntent(args: {
       ? "https://dialogflow.googleapis.com/v3"
       : `https://${args.dfcxLocation}-dialogflow.googleapis.com/v3`;
   const url = `${apiBase}/${sessionResource}:detectIntent`;
-  // welcome event の場合は agent の greeting を発火させる
+  // welcome event の場合は Default Welcome Intent を発火させる挨拶テキストを送る
+  // (DFCX agent には event handler が無いため、training phrases にマッチさせる)
   const queryInput = args.welcomeEvent
-    ? { event: { event: "WELCOME" }, languageCode: args.languageCode }
+    ? { text: { text: "こんにちは" }, languageCode: args.languageCode }
     : { text: { text: args.text }, languageCode: args.languageCode };
   const resp = await fetch(url, {
     method: "POST",
