@@ -160,6 +160,17 @@ export const INBOUND_SUPPORT_BASELINE: DfcxAgentConfig = {
       ],
     },
 
+    /* ---------- 5b. transfer (escalation のエイリアス) ----------
+     * build-form-parameters / render-instructions が targetPage: "transfer" を参照するため、
+     * inbound にも同名 page を用意して escalation へ流す。
+     */
+    {
+      displayName: "transfer",
+      transitionRoutes: [
+        { condition: "true", targetPage: "escalation" },
+      ],
+    },
+
     /* ---------- 6. closing ---------- */
     {
       displayName: "closing",
