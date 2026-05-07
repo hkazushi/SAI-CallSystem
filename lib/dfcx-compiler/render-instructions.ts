@@ -14,18 +14,30 @@ export function renderGreetingFulfillment(output: ChappieOutput): DfcxFulfillmen
   return txt(output.firstMessage);
 }
 
+/** タスクに重複しない slug を割り当て、intent / page で共有する */
+export function assignTaskSlugs(tasks: TaskFlow[]): Array<{ task: TaskFlow; slug: string }> {
+  const used = new Set<string>();
+  return tasks.map((t) => {
+    const base = slugify(t.name || t.trigger || "task");
+    let slug = base;
+    let i = 2;
+    while (used.has(slug)) slug = `${base}_${i++}`;
+    used.add(slug);
+    return { task: t, slug };
+  });
+}
+
 /** ChappieOutput.tasks を専用 Intent 配列に変換 (training phrases は自動補完) */
 export function renderTasksAsIntents(tasks: TaskFlow[]): DfcxIntentSpec[] {
-  return tasks.map((t) => {
-    const phrases = (t.intentTrainingPhrases?.length ? t.intentTrainingPhrases : [])
-      .concat(deriveTaskPhrases(t))
+  return assignTaskSlugs(tasks).map(({ task, slug }) => {
+    const phrases = (task.intentTrainingPhrases?.length ? task.intentTrainingPhrases : [])
+      .concat(deriveTaskPhrases(task))
       .filter((p) => p && p.trim().length > 0);
-    // 重複除去
     const uniquePhrases = Array.from(new Set(phrases));
     return {
-      displayName: `intent.task.${slugify(t.name)}`,
-      trainingPhrases: uniquePhrases.length > 0 ? uniquePhrases : [t.trigger || t.name],
-      fulfillmentMessage: t.steps[0] ?? "承知いたしました。",
+      displayName: `intent.task.${slug}`,
+      trainingPhrases: uniquePhrases.length > 0 ? uniquePhrases : [task.trigger || task.name],
+      fulfillmentMessage: task.steps[0] ?? "承知いたしました。",
     };
   });
 }
@@ -61,10 +73,8 @@ export function renderTasksAsPages(tasks: TaskFlow[]): Array<{
   nextPage: string;
   intentName: string;
 }> {
-  return tasks.map((t) => {
-    const slug = slugify(t.name);
-    // 入場メッセージ: 最初のステップを発話 + ヒアリングへ誘導
-    const headline = t.steps[0] ?? `承知しました。${t.name}ですね。`;
+  return assignTaskSlugs(tasks).map(({ task, slug }) => {
+    const headline = task.steps[0] ?? `承知しました。${task.name}ですね。`;
     return {
       displayName: `task.${slug}`,
       entryFulfillment: txt(headline),
@@ -163,11 +173,14 @@ export function renderGuardrailsBlock(output: ChappieOutput): string {
 
 /* -------- helpers -------- */
 
+/** DFCX displayName 用の slug 生成。日本語は保持し、特殊記号のみ除去。 */
 function slugify(s: string): string {
+  if (!s) return "task";
+  // DFCX displayName は ASCII 英数 + 日本語 (ひらがな/カタカナ/漢字) + ハイフン/アンダースコアを許容する
   return s
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "_")
+    .trim()
+    .replace(/[\s　]+/g, "_") // 空白 (半角・全角) → アンダースコア
+    .replace(/[^\w\-぀-ゟ゠-ヿ一-鿿]/g, "") // 許可文字以外を削除
     .slice(0, 40) || "task";
 }
 

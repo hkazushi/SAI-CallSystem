@@ -102,7 +102,18 @@ export function compileDfcxAgent(
 
   // ---------- task pages ----------
   // 各タスクに対応する page を生成し、対応する intent から遷移できるようにする
-  const taskPageSpecs = renderTasksAsPages(output.tasks);
+  const rawTaskPageSpecs = renderTasksAsPages(output.tasks);
+  // 同名衝突対策: displayName が重複したら -2, -3 ... を付与
+  const seenPageNames = new Set<string>();
+  const taskPageSpecs = rawTaskPageSpecs.map((spec) => {
+    let name = spec.displayName;
+    let i = 2;
+    while (seenPageNames.has(name)) {
+      name = `${spec.displayName}-${i++}`;
+    }
+    seenPageNames.add(name);
+    return { ...spec, displayName: name };
+  });
   const taskPages: DfcxPage[] = taskPageSpecs.map((spec) => ({
     displayName: spec.displayName,
     entryFulfillment: spec.entryFulfillment,
