@@ -14,15 +14,102 @@ export function renderGreetingFulfillment(output: ChappieOutput): DfcxFulfillmen
   return txt(output.firstMessage);
 }
 
-/** ChappieOutput.tasks を反論処理 / 質問対応用の Intent 配列に変換 */
+/** ChappieOutput.tasks を専用 Intent 配列に変換 (training phrases は自動補完) */
 export function renderTasksAsIntents(tasks: TaskFlow[]): DfcxIntentSpec[] {
-  return tasks
-    .filter((t) => t.intentTrainingPhrases && t.intentTrainingPhrases.length > 0)
-    .map((t) => ({
+  return tasks.map((t) => {
+    const phrases = (t.intentTrainingPhrases?.length ? t.intentTrainingPhrases : [])
+      .concat(deriveTaskPhrases(t))
+      .filter((p) => p && p.trim().length > 0);
+    // 重複除去
+    const uniquePhrases = Array.from(new Set(phrases));
+    return {
       displayName: `intent.task.${slugify(t.name)}`,
-      trainingPhrases: t.intentTrainingPhrases ?? [t.trigger],
+      trainingPhrases: uniquePhrases.length > 0 ? uniquePhrases : [t.trigger || t.name],
       fulfillmentMessage: t.steps[0] ?? "承知いたしました。",
-    }));
+    };
+  });
+}
+
+/** task name / trigger から training phrases バリエーションを生成 (AI が phrases を返さなかったときのフォールバック) */
+function deriveTaskPhrases(task: TaskFlow): string[] {
+  const out: string[] = [];
+  if (task.trigger) {
+    out.push(task.trigger);
+    out.push(`${task.trigger}したい`);
+    out.push(`${task.trigger}をお願いします`);
+    out.push(`${task.trigger}のことで`);
+  }
+  if (task.name && task.name !== task.trigger) {
+    out.push(task.name);
+    out.push(`${task.name}したい`);
+    out.push(`${task.name}お願いします`);
+  }
+  // 「新規予約」などキーワード抽出
+  const keywords = (task.name + " " + task.trigger).match(/[一-龯ぁ-んァ-ヶー]{2,}/g) ?? [];
+  for (const kw of keywords) {
+    out.push(kw);
+    if (kw.length >= 3) out.push(`${kw}したいです`);
+  }
+  return out;
+}
+
+/** ChappieOutput.tasks を専用 Page 配列に変換 (各タスクに対応する確認発話 + ヒアリング誘導) */
+export function renderTasksAsPages(tasks: TaskFlow[]): Array<{
+  displayName: string;
+  entryFulfillment: DfcxFulfillment;
+  // 次に遷移すべき page (基本 hearing、ヒアリング不要なら resolution / closing)
+  nextPage: string;
+  intentName: string;
+}> {
+  return tasks.map((t) => {
+    const slug = slugify(t.name);
+    // 入場メッセージ: 最初のステップを発話 + ヒアリングへ誘導
+    const headline = t.steps[0] ?? `承知しました。${t.name}ですね。`;
+    return {
+      displayName: `task.${slug}`,
+      entryFulfillment: txt(headline),
+      nextPage: "hearing",
+      intentName: `intent.task.${slug}`,
+    };
+  });
+}
+
+/** ペルソナ / ガードレールを agent.description にまとめる */
+export function renderAgentDescription(output: ChappieOutput, tenantId: string): string {
+  const lines: string[] = [];
+  lines.push(`# ${output.assistantName}`);
+  lines.push(`tenant: ${tenantId}  industry: ${output.industry}`);
+  lines.push("");
+  lines.push("## ペルソナ");
+  lines.push(`tone: ${output.persona.tone}`);
+  if (output.persona.doNots.length > 0) {
+    lines.push("doNots:");
+    output.persona.doNots.forEach((d) => lines.push(`  - ${d}`));
+  }
+  lines.push("");
+  lines.push("## タスクフロー");
+  output.tasks.forEach((t, i) => {
+    lines.push(`${i + 1}. ${t.name} (trigger: ${t.trigger})`);
+    t.steps.slice(0, 3).forEach((s) => lines.push(`   - ${s}`));
+  });
+  lines.push("");
+  lines.push("## ヒアリング項目");
+  output.hearingFields.forEach((f) => {
+    lines.push(`- ${f.label}${f.required ? " (必須)" : ""}`);
+  });
+  if (output.guardrails.transferConditions.length > 0) {
+    lines.push("");
+    lines.push("## 人間転送条件");
+    output.guardrails.transferConditions.forEach((t) => lines.push(`- ${t}`));
+  }
+  if (output.guardrails.prohibitedBehaviors.length > 0) {
+    lines.push("");
+    lines.push("## 禁止行為");
+    output.guardrails.prohibitedBehaviors.forEach((p) => lines.push(`- ${p}`));
+  }
+  // DFCX agent.description は max 500 字。安全側で 480 字でカット
+  const out = lines.join("\n");
+  return out.length > 480 ? out.slice(0, 477) + "..." : out;
 }
 
 /** typicalObjections (Template由来) を業界別反論 Intent に変換 */
