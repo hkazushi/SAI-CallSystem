@@ -74,7 +74,7 @@ export function renderTasksAsPages(tasks: TaskFlow[]): Array<{
   intentName: string;
 }> {
   return assignTaskSlugs(tasks).map(({ task, slug }) => {
-    const headline = task.steps[0] ?? `承知しました。${task.name}ですね。`;
+    const headline = buildTaskHeadline(task);
     return {
       displayName: `task.${slug}`,
       entryFulfillment: txt(headline),
@@ -172,6 +172,23 @@ export function renderGuardrailsBlock(output: ChappieOutput): string {
 }
 
 /* -------- helpers -------- */
+
+/**
+ * タスクページに表示する自然な応答文を生成する。
+ * steps[0] が「お名前を聞く」のような内部指示の場合は使わず、
+ * task.name / trigger から自然な受付応答文を作る。
+ */
+function buildTaskHeadline(task: TaskFlow): string {
+  const candidate = task.steps[0] ?? "";
+  // steps[0] が「〜を聞く」「〜する」「〜確認する」など内部指示っぽければ使わない
+  const isInternalInstruction = /^[^\s。！？]{2,10}(を|の|する|確認|聞く|伺|入力|取得|登録|案内)/.test(candidate.trim());
+  if (candidate && !isInternalInstruction) {
+    return candidate;
+  }
+  // 自然な受付応答文を task.name / trigger から生成
+  const subject = task.name || task.trigger || "ご用件";
+  return `かしこまりました。${subject}ですね。少々お待ちください。`;
+}
 
 /** DFCX displayName 用の slug 生成。日本語は保持し、特殊記号のみ除去。 */
 function slugify(s: string): string {
