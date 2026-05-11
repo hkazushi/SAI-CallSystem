@@ -14,6 +14,12 @@ import {
   Zap,
   LogOut,
   BookTemplate,
+  Megaphone,
+  ContactRound,
+  ShieldCheck,
+  UserCog,
+  FlaskConical,
+  FileBarChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,13 +37,19 @@ const mainNav = [
   { href: "/dashboard", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/projects", label: "プロジェクト", icon: Layers },
   { href: "/templates", label: "テンプレート", icon: BookTemplate },
+  { href: "/campaigns", label: "キャンペーン", icon: Megaphone },
+  { href: "/contacts", label: "顧客リスト", icon: ContactRound },
   { href: "/lists", label: "リスト管理", icon: Database },
   { href: "/calls", label: "通話ログ", icon: PhoneCall },
+  { href: "/experiments", label: "A/B テスト", icon: FlaskConical },
+  { href: "/reports", label: "レポート", icon: FileBarChart },
 ];
 
 const settingsNav = [
+  { href: "/settings/members", label: "メンバー・招待", icon: UserCog },
   { href: "/settings/credentials", label: "AI認証情報", icon: Key },
   { href: "/settings/users", label: "ユーザー管理", icon: Users },
+  { href: "/settings/audit", label: "監査ログ", icon: ShieldCheck },
   { href: "/settings/twilio", label: "Twilio設定", icon: Settings },
 ];
 
