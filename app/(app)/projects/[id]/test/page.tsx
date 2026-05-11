@@ -44,8 +44,9 @@ function TestTextInner() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [turns]);
 
-  async function send(text: string) {
-    if (!agentName || !sessionId) {
+  // sessionId を引数で受け取るバージョン（startGreet で setState と同期ズレを防ぐ）
+  async function sendWithSession(sid: string, text: string) {
+    if (!agentName || !sid) {
       setError("agentName/sessionId が未設定です");
       return;
     }
@@ -55,7 +56,7 @@ function TestTextInner() {
       const resp = await fetch(`/api/projects/${projectId}/dfcx-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentName, sessionId, text }),
+        body: JSON.stringify({ agentName, sessionId: sid, text }),
       });
       const data = (await resp.json()) as {
         ok?: boolean;
@@ -75,10 +76,18 @@ function TestTextInner() {
     }
   }
 
+  async function send(text: string) {
+    return sendWithSession(sessionId, text);
+  }
+
   function startGreet() {
+    // setState は非同期なので新しい ID を変数で保持して直接渡す
+    const newId = safeUuid();
     setTurns([]);
-    setSessionId(safeUuid());
-    setTimeout(() => send(""), 50);
+    setSessionId(newId);
+    setError(null);
+    setPageInfo(null);
+    sendWithSession(newId, "");
   }
 
   function reset() {
