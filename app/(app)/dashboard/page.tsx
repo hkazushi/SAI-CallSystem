@@ -1,12 +1,11 @@
 "use client";
 import { StatCard } from "@/components/ui/stat-card";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageTransition, StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
+import { LiveKpi } from "@/components/dashboard/live-kpi";
 import { mockDashboardKPI, mockCallTrend, mockCallLogs, mockProjects } from "@/lib/mock-data";
-import { ArrowRight, Circle } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -50,6 +49,19 @@ export default function DashboardPage() {
           title="ダッシュボード"
           description="今月の通話実績とアクティブプロジェクトの状況"
         />
+
+        {/* リアルタイム KPI（30秒オートリフレッシュ） */}
+        <section className="space-y-3">
+          <div className="flex items-baseline gap-2">
+            <p className="text-[10px] tracking-[0.13em] uppercase text-muted-foreground/50 font-medium">リアルタイム</p>
+            <p className="text-sm font-semibold">運用 KPI</p>
+            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400/90 ml-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              LIVE
+            </span>
+          </div>
+          <LiveKpi />
+        </section>
 
         {/* KPI Cards */}
         <StaggerContainer className="grid grid-cols-2 lg:grid-cols-4 gap-3">
