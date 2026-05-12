@@ -241,7 +241,9 @@ function mergeIntentsByName(intents: DfcxIntent[]): DfcxIntent[] {
   return Array.from(map.values());
 }
 
-/** 反論 Intent 群から hearing → objection_handling Page への transitionRoute を生成 */
+/** 反論 Intent 群から hearing/greeting → objection_handling Page への transitionRoute を生成
+ *  triggerFulfillment にIntent固有の回答を含めることで、ページ到着時に即座に適切な切り返しを発話する
+ */
 function buildObjectionTransitions(
   objectionIntents: DfcxIntent[],
   direction: "outbound" | "inbound",
@@ -251,6 +253,10 @@ function buildObjectionTransitions(
   return objectionIntents.map((intent) => ({
     intent: intent.displayName,
     targetPage: "objection_handling",
+    // Intent.description に fulfillmentMessage が格納されているため、切り返し文として即座に発話
+    triggerFulfillment: intent.description
+      ? { messages: [{ text: { text: [intent.description] } }] }
+      : undefined,
   }));
 }
 
