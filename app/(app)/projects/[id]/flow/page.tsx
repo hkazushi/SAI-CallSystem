@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { mockProjects } from "@/lib/mock-data";
 import { ChevronLeft, Plus, Save, Trash2, MessageSquare, GitBranch, Phone, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type NodeType = "start" | "message" | "branch" | "end_success" | "end_fail";
 
@@ -37,10 +37,22 @@ const nodeConfig: Record<NodeType, { icon: typeof MessageSquare; color: string; 
 
 export default function FlowEditorPage() {
   const { id } = useParams();
-  const project = mockProjects.find((p) => p.id === id) ?? mockProjects[0];
+  const mockProject = mockProjects.find((p) => p.id === id) ?? mockProjects[0];
+  const isUUID = typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id);
+  const [projectName, setProjectName] = useState<string>(isUUID ? "" : mockProject.name);
   const [nodes, setNodes] = useState<FlowNode[]>(DEFAULT_NODES);
   const [selected, setSelected] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!isUUID) return;
+    fetch(`/api/projects-store/${id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.project?.name) setProjectName(data.project.name);
+      })
+      .catch(() => {});
+  }, [id, isUUID]);
 
   async function handleSave() {
     setSaved(true);
@@ -54,7 +66,7 @@ export default function FlowEditorPage() {
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/30 bg-card/40 backdrop-blur-sm shrink-0">
         <Link href={`/projects/${id}`}>
           <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground">
-            <ChevronLeft className="w-4 h-4 mr-1" />{project.name}
+            <ChevronLeft className="w-4 h-4 mr-1" />{projectName || "プロジェクト"}
           </Button>
         </Link>
         <div className="w-px h-5 bg-border/40" />

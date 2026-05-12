@@ -5,9 +5,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageTransition, StaggerContainer, StaggerItem } from "@/components/ui/page-transition";
-import { mockDashboardKPI, mockCallTrend, mockCallLogs, mockProjects } from "@/lib/mock-data";
-import { ArrowRight, Circle } from "lucide-react";
+import { mockDashboardKPI, mockCallTrend } from "@/lib/mock-data";
+import { ArrowRight, Phone } from "lucide-react";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -18,30 +19,29 @@ function formatDuration(s: number) {
   return `${m}分${String(sec).padStart(2, "0")}秒`;
 }
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-const outcomeLabels: Record<string, { label: string; color: string; dot: string }> = {
-  completed: { label: "完了", color: "text-emerald-400", dot: "bg-emerald-400" },
-  answered:  { label: "応答", color: "text-blue-400", dot: "bg-blue-400" },
-  no_answer: { label: "不在", color: "text-amber-400", dot: "bg-amber-400" },
-  busy:      { label: "話中", color: "text-orange-400", dot: "bg-orange-400" },
-  failed:    { label: "失敗", color: "text-red-400", dot: "bg-red-400" },
-};
-
-const projectName: Record<string, string> = {
-  "proj-001": "クラウド会計 OB",
-  "proj-002": "CSサポート IB",
-  "proj-003": "保険フォロー OB",
-  "proj-005": "太陽光 OB",
+type RealProject = {
+  id: string;
+  name: string;
+  template_id?: string;
+  dfcx_agent_id?: string;
+  dfcx_agent_name?: string;
+  dfcx_deploy_status?: string;
+  created_at: string;
 };
 
 export default function DashboardPage() {
   const kpi = mockDashboardKPI;
-  const recentCalls = mockCallLogs.slice(0, 8);
-  const activeProjects = mockProjects.filter((p) => p.status === "active");
+  const [activeProjects, setActiveProjects] = useState<RealProject[]>([]);
+
+  useEffect(() => {
+    fetch("/api/projects-store")
+      .then((r) => r.json())
+      .then((data) => {
+        const projects: RealProject[] = data?.projects ?? [];
+        setActiveProjects(projects.filter((p) => !!p.dfcx_agent_name));
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <PageTransition>
@@ -137,22 +137,27 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="space-y-2">
-              {activeProjects.map((p) => (
-                <Link key={p.id} href={`/projects/${p.id}`}>
-                  <div className="group flex items-start gap-3 p-3 rounded-lg border border-transparent hover:border-white/7 hover:bg-white/3 transition-all cursor-pointer">
-                    <div className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium truncate group-hover:text-white transition-colors">{p.name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-muted-foreground/45">{p.ai_provider === "vapi" ? "Vapi.ai" : "Dialogflow"}</span>
-                        <span className="text-[10px] text-muted-foreground/45">·</span>
-                        <span className="text-[10px] text-muted-foreground/45 num">{p._stats.total_calls.toLocaleString()}件</span>
+              {activeProjects.length === 0 ? (
+                <p className="text-xs text-muted-foreground/50 py-4 text-center">稼働中のプロジェクトはありません</p>
+              ) : (
+                activeProjects.map((p) => (
+                  <Link key={p.id} href={`/projects/${p.id}`}>
+                    <div className="group flex items-start gap-3 p-3 rounded-lg border border-transparent hover:border-white/7 hover:bg-white/3 transition-all cursor-pointer">
+                      <div className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium truncate group-hover:text-white transition-colors">{p.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-muted-foreground/45">Dialogflow CX</span>
+                          <span className="text-[10px] text-muted-foreground/45">·</span>
+                          <span className="text-[10px] text-muted-foreground/45 num">
+                            {new Date(p.created_at).toLocaleDateString("ja-JP")}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <span className="text-[11px] font-semibold text-emerald-400/80 shrink-0 num mt-0.5">{p._stats.ai_resolution_rate}%</span>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -184,28 +189,14 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {recentCalls.map((call) => {
-                const outcome = outcomeLabels[call.outcome as string] ?? { label: call.outcome as string, color: "text-muted-foreground", dot: "bg-muted-foreground" };
-                return (
-                  <tr key={call.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                    <td className="px-5 py-3 font-mono text-[11px] text-muted-foreground/70">{call.direction === "inbound" ? call.caller_number : call.called_number}</td>
-                    <td className="px-3 py-3 text-[12px] text-muted-foreground/55">{projectName[call.project_id] ?? call.project_id}</td>
-                    <td className="px-3 py-3">
-                      <span className={`text-[10px] font-semibold tracking-wide ${call.direction === "inbound" ? "text-blue-400/70" : "text-violet-400/70"}`}>
-                        {call.direction === "inbound" ? "IB" : "OB"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`flex items-center gap-1.5 text-[12px] font-medium ${outcome.color}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${outcome.dot}`} />
-                        {outcome.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-[12px] text-muted-foreground/50 num">{call.duration_seconds}s</td>
-                    <td className="px-3 py-3 text-[11px] text-muted-foreground/40 num">{formatDate(call.started_at)}</td>
-                  </tr>
-                );
-              })}
+              <tr>
+                <td colSpan={6} className="px-5 py-12 text-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground/40">
+                    <Phone className="w-8 h-8" />
+                    <p className="text-xs">Twilio接続後に通話ログが表示されます</p>
+                  </div>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,9 +94,11 @@ export default function CredentialsPage() {
             <p className="font-semibold text-sm">Twilio</p>
             <p className="text-xs text-muted-foreground">電話番号・通話インフラの設定</p>
           </div>
-          <Button size="sm" variant="outline" className="ml-auto border-border/40 h-7 text-xs">
-            <Plus className="w-3 h-3 mr-1" />設定
-          </Button>
+          <Link href="/settings/twilio">
+            <Button size="sm" variant="outline" className="ml-auto border-border/40 h-7 text-xs">
+              <Plus className="w-3 h-3 mr-1" />設定
+            </Button>
+          </Link>
         </div>
       </Card>
 

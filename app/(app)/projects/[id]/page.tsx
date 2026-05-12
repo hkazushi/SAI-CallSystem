@@ -338,7 +338,7 @@ function SavedProjectView({ project }: { project: SavedProject }) {
     firstMessage?: string;
     persona?: { tone?: string; language?: string; doNots?: string[] };
     tasks?: { name: string; trigger?: string; steps?: string[] }[];
-    hearingFields?: { name: string; required?: boolean }[];
+    hearingFields?: { key?: string; label?: string; name?: string; required?: boolean }[];
     guardrails?: { transferConditions?: string[]; prohibitedBehaviors?: string[] };
   };
   const chappie = (project.chappie_output as ChappieOut | null) ?? {};
@@ -536,7 +536,7 @@ function SavedProjectView({ project }: { project: SavedProject }) {
                 {chappie.hearingFields.map((h, i) => (
                   <li key={i} className="flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full ${h.required ? "bg-amber-400" : "bg-white/30"}`} />
-                    <span>{h.name}</span>
+                    <span>{h.label ?? h.key ?? h.name ?? "(項目)"}</span>
                     {h.required && <span className="text-[10px] text-amber-400/80">必須</span>}
                   </li>
                 ))}

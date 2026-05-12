@@ -1,13 +1,10 @@
 "use client";
-import Link from "next/link";
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { mockCallLogs } from "@/lib/mock-data";
-import { Search, Filter, Download, Phone, PhoneIncoming, PhoneOutgoing } from "lucide-react";
+import { Search, Download, Phone } from "lucide-react";
 
 const outcomeConfig: Record<string, { label: string; color: string; bg: string }> = {
   completed: { label: "完了", color: "text-emerald-400", bg: "bg-emerald-400/10" },
@@ -17,34 +14,10 @@ const outcomeConfig: Record<string, { label: string; color: string; bg: string }
   failed:    { label: "失敗", color: "text-red-400", bg: "bg-red-400/10" },
 };
 
-const projectNames: Record<string, string> = {
-  "proj-001": "クラウド会計 OB",
-  "proj-002": "CSサポート IB",
-  "proj-003": "保険フォロー OB",
-  "proj-005": "太陽光 OB",
-};
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-function formatDuration(s: number) {
-  if (s < 60) return `${s}秒`;
-  return `${Math.floor(s / 60)}分${s % 60}秒`;
-}
-
 export default function CallsPage() {
   const [search, setSearch] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<string | null>(null);
   const [dirFilter, setDirFilter] = useState<string | null>(null);
-
-  const filtered = mockCallLogs.filter((c) => {
-    if (search && !c.caller_number.includes(search) && !c.called_number.includes(search)) return false;
-    if (outcomeFilter && c.outcome !== outcomeFilter) return false;
-    if (dirFilter && c.direction !== dirFilter) return false;
-    return true;
-  });
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
@@ -115,43 +88,19 @@ export default function CallsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((call) => {
-                const outcome = outcomeConfig[call.outcome as string] ?? { label: call.outcome as string, color: "text-muted-foreground", bg: "" };
-                return (
-                  <tr key={call.id} className="border-b border-border/10 hover:bg-white/2 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link href={`/calls/${call.id}`} className="font-mono text-xs hover:text-primary transition-colors">
-                        {call.direction === "inbound" ? call.caller_number : call.called_number}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{projectNames[call.project_id] ?? call.project_id}</td>
-                    <td className="px-4 py-3">
-                      {call.direction === "inbound"
-                        ? <span className="flex items-center gap-1 text-xs text-blue-400"><PhoneIncoming className="w-3 h-3" />着信</span>
-                        : <span className="flex items-center gap-1 text-xs text-violet-400"><PhoneOutgoing className="w-3 h-3" />発信</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${outcome.bg} ${outcome.color}`}>
-                        {outcome.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      {call.ai_resolved ? <span className="text-emerald-400">✓</span> : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{formatDuration(call.duration_seconds)}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(call.started_at)}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs">
-                      <span className="line-clamp-1">{call.summary ?? "—"}</span>
-                    </td>
-                  </tr>
-                );
-              })}
+              <tr>
+                <td colSpan={8} className="px-4 py-16 text-center">
+                  <div className="flex flex-col items-center gap-3 text-muted-foreground/40">
+                    <Phone className="w-10 h-10" />
+                    <p className="text-sm">まだ通話ログはありません。Twilioを接続すると、着信・発信の履歴がここに表示されます。</p>
+                  </div>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
         <div className="p-4 border-t border-border/20 text-xs text-muted-foreground">
-          {filtered.length} 件表示 (全 {mockCallLogs.length} 件)
+          0 件表示
         </div>
       </Card>
     </div>
