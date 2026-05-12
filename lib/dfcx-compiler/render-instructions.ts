@@ -180,14 +180,30 @@ export function renderGuardrailsBlock(output: ChappieOutput): string {
  */
 function buildTaskHeadline(task: TaskFlow): string {
   const candidate = task.steps[0] ?? "";
-  // steps[0] が「〜を聞く」「〜する」「〜確認する」など内部指示っぽければ使わない
-  const isInternalInstruction = /^[^\s。！？]{2,10}(を|の|する|確認|聞く|伺|入力|取得|登録|案内)/.test(candidate.trim());
-  if (candidate && !isInternalInstruction) {
+  // steps[] はほぼ全て内部指示文（「〜する」「〜を伝える」「〜を確認する」など）のため
+  // 顧客への発話として使えるかを厳しく判定する。
+  const isCustomerFacing = isLikelyCustomerFacingText(candidate);
+  if (isCustomerFacing) {
     return candidate;
   }
   // 自然な受付応答文を task.name / trigger から生成
   const subject = task.name || task.trigger || "ご用件";
-  return `かしこまりました。${subject}ですね。少々お待ちください。`;
+  return `かしこまりました。${subject}についてですね。少々お待ちください。`;
+}
+
+/**
+ * テキストが顧客向けの発話として使えるかを判定する。
+ * 内部指示文の特徴: 動詞終止形（〜する/〜伝える/〜確認する/〜案内する/〜聞く/〜打診する）
+ * 顧客向けの特徴: 疑問形（〜ですか？）または丁寧語（〜ます/〜ください）
+ */
+function isLikelyCustomerFacingText(text: string): boolean {
+  if (!text || text.trim().length === 0) return false;
+  // 丁寧語・疑問形ならOK
+  if (/(ます|ました|ください|でしょうか|ですか|いただけ|させていただ)[。？！]?$/.test(text)) return true;
+  // 内部指示パターンはNG
+  if (/(する|確認する|聞く|伺う|案内する|伝える|提示する|打診する|取得する|説明する|紹介する|送付する|設定する|行う)[。]?$/.test(text)) return false;
+  // それ以外は長さで判断（40字以上は内部指示っぽい）
+  return text.length < 40;
 }
 
 /** DFCX displayName 用の slug 生成。日本語は保持し、特殊記号のみ除去。 */

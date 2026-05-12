@@ -122,11 +122,20 @@ function buildSingleParameter(field: HearingField): DfcxParameter {
 }
 
 function buildInitialPrompt(field: HearingField): string {
-  // description があればそれを優先
-  if (field.description) return `${field.label}を教えてください。${field.description}`;
-  // type=enum で options がある場合は選択肢を提示
+  // type=enum で options がある場合は選択肢を提示（description より優先）
   if (field.type === "enum" && field.options && field.options.length > 0) {
-    return `${field.label}を教えてください。例えば ${field.options.slice(0, 3).join("、")} などです。`;
+    const opts = field.options.slice(0, 3).join("、");
+    return `${field.label}はいかがでしょうか？${opts} などから教えてください。`;
   }
-  return `${field.label}を教えてください。`;
+  // description に「...？」形式の質問文があれば抽出して使う
+  // 例: "水の消費量に使用。「お住まいは何名様ですか？」と聞く" → "お住まいは何名様ですか？"
+  if (field.description) {
+    const quoted = field.description.match(/「([^」]+？)」/);
+    if (quoted) return quoted[1];
+  }
+  // type=number は数字を尋ねる自然な表現に
+  if (field.type === "number") {
+    return `${field.label}を教えていただけますでしょうか？`;
+  }
+  return `${field.label}についてお聞かせいただけますか？`;
 }
