@@ -28,6 +28,10 @@ import {
   type DfcxDeployResult,
 } from "@/lib/dfcx-compiler";
 import type { ChappieOutput } from "@/lib/vapi-compiler/types";
+
+/** レートリミット対策: DFCX API コール間に 1.1秒のディレイを挿入 */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const RATE_DELAY_MS = 1100; // 60 req/min = 1 req/sec → 1.1s で安全マージン
 import type { Template } from "@/lib/templates/types";
 import {
   dfcxFetch,
@@ -125,8 +129,9 @@ export async function POST(req: Request, { params }: RouteContext) {
     for (const intent of existingIntents.intents ?? []) {
       intentNameMap.set(intent.displayName, intent.name);
     }
-    // 4b: 自前の Intent を作成
+    // 4b: 自前の Intent を作成（レートリミット対策: 1.1秒間隔）
     for (const intent of config.intents) {
+      await sleep(RATE_DELAY_MS);
       const created = await dfcxFetch<{ name: string }>(
         `/${createdAgentName}/intents`,
         {
@@ -142,6 +147,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const flowResource = defaultFlow.name;
     const pageNameMap = new Map<string, string>(); // displayName → resource name
     for (const page of config.pages) {
+      await sleep(RATE_DELAY_MS);
       const skeleton: Record<string, unknown> = {
         displayName: page.displayName,
         entryFulfillment: page.entryFulfillment,
@@ -184,6 +190,7 @@ export async function POST(req: Request, { params }: RouteContext) {
         updateMask.push("form");
       }
       const pageResource = pageNameMap.get(page.displayName)!;
+      await sleep(RATE_DELAY_MS);
       await dfcxFetch(
         `/${pageResource}?updateMask=${updateMask.join(",")}`,
         {
