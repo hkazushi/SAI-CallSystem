@@ -128,6 +128,19 @@ export function compileDfcxAgent(
     (spec) => ({ intent: spec.intentName, targetPage: spec.displayName }),
   );
 
+  // greeting から反論・質問 Intent への transitionRoutes
+  // (顧客はgreeting後すぐに反論・質問することが多いため、greeting page でも処理できるようにする)
+  const greetingObjRoutes = direction === "outbound"
+    ? buildObjectionTransitions([...objectionIntents, ...overlayExtraIntents], direction)
+    : [];
+
+  // greeting から転送 Intent への transitionRoutes
+  const allTransferIntents = [...transferIntent, ...overlayTransfer];
+  const greetingTransferRoutes = allTransferIntents.map((i) => ({
+    intent: i.displayName,
+    targetPage: "transfer",
+  }));
+
   // ---------- pages ----------
   cloned.pages = cloned.pages.map((page) => {
     if (page.displayName === "greeting") {
@@ -136,6 +149,8 @@ export function compileDfcxAgent(
         entryFulfillment: renderGreetingFulfillment(output),
         transitionRoutes: [
           ...greetingTaskRoutes,
+          ...greetingObjRoutes,
+          ...greetingTransferRoutes,
           ...(page.transitionRoutes ?? []),
         ],
       };
