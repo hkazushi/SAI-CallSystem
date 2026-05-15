@@ -104,8 +104,11 @@ export const OUTBOUND_SALES_BASELINE: DfcxAgentConfig = {
         "ありがとうございます。今お電話に出られているのはご契約者ご本人様でいらっしゃいますか？",
       ),
       transitionRoutes: [
+        // affirmative と consent は両方「はい」を含むため、NLU の揺れに備えて両方ルーティング
         { intent: "intent.affirmative", targetPage: "hearing" },
-        { intent: "intent.negative", targetPage: "transfer" },
+        { intent: "intent.consent",     targetPage: "hearing" },
+        { intent: "intent.negative",    targetPage: "transfer" },
+        { intent: "intent.refuse",      targetPage: "transfer" },
       ],
       eventHandlers: standardReprompts(),
     },
@@ -146,6 +149,12 @@ export const OUTBOUND_SALES_BASELINE: DfcxAgentConfig = {
       },
       transitionRoutes: [
         { condition: "$page.params.status = \"FINAL\"", targetPage: "appointment" },
+        // 途中で断られた場合
+        { intent: "intent.refuse",          triggerFulfillment: txt("承知いたしました。ご検討いただき、ありがとうございました。"), targetPage: "closing" },
+        { intent: "intent.busy",            triggerFulfillment: txt("承知いたしました。後ほどあらためてご連絡させていただきます。"), targetPage: "closing" },
+        // 途中で担当者を求められた場合
+        { intent: "intent.transfer_request",  targetPage: "transfer" },
+        { intent: "intent.transfer.requested", targetPage: "transfer" },
       ],
       eventHandlers: standardReprompts(),
     },
@@ -157,8 +166,14 @@ export const OUTBOUND_SALES_BASELINE: DfcxAgentConfig = {
         "そうですよね、ご事情承知いたしました。少しだけお話しさせていただいてもよろしいですか？",
       ),
       transitionRoutes: [
-        { intent: "intent.consent", targetPage: "hearing" },
-        { intent: "intent.refuse", targetPage: "closing" },
+        // affirmative / consent 両方「はい」を拾う
+        { intent: "intent.affirmative", targetPage: "hearing" },
+        { intent: "intent.consent",     targetPage: "hearing" },
+        { intent: "intent.refuse",      targetPage: "closing" },
+        { intent: "intent.negative",    targetPage: "closing" },
+        // 担当者転送要求
+        { intent: "intent.transfer_request",   targetPage: "transfer" },
+        { intent: "intent.transfer.requested", targetPage: "transfer" },
       ],
       eventHandlers: standardReprompts(),
     },
@@ -191,6 +206,9 @@ export const OUTBOUND_SALES_BASELINE: DfcxAgentConfig = {
         { intent: "intent.refuse",      triggerFulfillment: txt("承知いたしました。ご検討ありがとうございました。またご興味が出ましたら、ぜひお声がけください。"), targetPage: "closing" },
         { intent: "intent.negative",    triggerFulfillment: txt("承知いたしました。またの機会にぜひご検討ください。"), targetPage: "closing" },
         { intent: "intent.busy",        triggerFulfillment: txt("失礼いたしました。後ほど改めてご連絡させていただきます。"), targetPage: "closing" },
+        // 担当者転送要求
+        { intent: "intent.transfer_request",   targetPage: "transfer" },
+        { intent: "intent.transfer.requested", targetPage: "transfer" },
         { condition: "$page.params.status = \"FINAL\"", targetPage: "closing" },
       ],
       eventHandlers: standardReprompts(),
